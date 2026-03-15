@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "check-build-path": "node scripts/check-build-path.js",
+    "dev": "npm run check-build-path && tauri dev",
+    "build": "npm run check-build-path && tauri build"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"
