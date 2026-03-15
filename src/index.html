@@ -640,6 +640,105 @@ body {
 
 #generate-modal .close-btn:hover { background: #1a4a8a; }
 
+/* ── Settings Modal ── */
+#settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 900;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+#settings-overlay.visible {
+  display: flex;
+}
+
+#settings-modal {
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+
+#settings-modal h2 {
+  font-size: 18px;
+  margin-bottom: 12px;
+  color: #4fc3f7;
+}
+
+#settings-modal label {
+  font-size: 13px;
+  color: #ccc;
+  display: block;
+  margin-bottom: 4px;
+}
+
+#settings-modal input[type="text"] {
+  width: 100%;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #0f3460;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+#settings-modal .token-help {
+  font-size: 11px;
+  color: #666;
+  margin-top: 4px;
+}
+
+#settings-modal .preview-area {
+  margin-top: 12px;
+  background: #1a1a2e;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+#settings-modal .preview-label {
+  color: #888;
+  margin-right: 6px;
+}
+
+#settings-modal #settings-desc-preview {
+  color: #e0e0e0;
+}
+
+#settings-modal .btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+#settings-modal .btn-row button {
+  background: #0f3460;
+  color: #e0e0e0;
+  border: 1px solid #1a4a8a;
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#settings-modal .btn-row button:hover { background: #1a4a8a; }
+
+#settings-modal .btn-row button.save {
+  background: #2e7d32;
+  border-color: #388e3c;
+}
+
+#settings-modal .btn-row button.save:hover { background: #388e3c; }
+
 /* ── Empty state ── */
 #empty-state {
   position: absolute;
@@ -773,6 +872,25 @@ body {
     <textarea id="generate-summary" placeholder="Summary will appear here..." readonly></textarea>
     <div id="generate-results-list"></div>
     <button class="close-btn" id="btn-generate-close">Close</button>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-overlay">
+  <div id="settings-modal">
+    <h2>Settings</h2>
+    <label for="settings-desc-format">Room Description Format</label>
+    <input type="text" id="settings-desc-format" placeholder="{MAP} - {TITLE} {COORDS}">
+    <div class="token-help">Tokens: {MAP} {TITLE} {COORDS} {X} {Y}</div>
+    <div class="preview-area">
+      <span class="preview-label">Preview:</span>
+      <span id="settings-desc-preview"></span>
+    </div>
+    <div class="btn-row">
+      <button id="btn-settings-reset">Reset to Default</button>
+      <button id="btn-settings-cancel">Cancel</button>
+      <button class="save" id="btn-settings-save">Save</button>
+    </div>
   </div>
 </div>
 
