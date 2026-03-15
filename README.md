@@ -1,6 +1,14 @@
-# <img src="src-tauri/icons/icon.png" alt="AGS Map Editor Logo" width="128" height="128" style="vertical-align: middle;"> AGS Map Editor
+<p align="center">
+  <img src="src-tauri/icons/icon.png" alt="AGS Map Editor Logo" width="213" height="213">
+</p>
+
+# AGS Map Editor
 
 A desktop application for visually designing room maps for [Adventure Game Studio](https://www.adventuregamestudio.co.uk/) (AGS) projects.
+
+## Overview
+
+AGS Map Editor lets you lay out your game's rooms on a spatial grid, assign AGS room numbers, attach concept art, and add notes — all saved directly into your AGS project folder. It gives you a bird's-eye view of how your game world fits together.
 
 ## Download
 
@@ -12,9 +20,13 @@ Download the latest installer for your platform from [GitHub Releases](https://g
 | macOS | `.dmg` |
 | Linux | `.AppImage` or `.deb` |
 
-## Overview
-
-AGS Map Editor lets you lay out your game's rooms on a spatial grid, assign AGS room numbers, attach concept art, and add notes — all saved directly into your AGS project folder. It gives you a bird's-eye view of how your game world fits together.
+> **Note:** The macOS build is not currently code-signed. When you first open the app, macOS will block it. To allow it, run the following in Terminal:
+>
+> ```bash
+> xattr -cr /Applications/AGS\ Map\ Editor.app
+> ```
+>
+> Then open the app normally.
 
 ## Getting Started
 
