@@ -1516,29 +1516,216 @@ function assignRoomIds() {
   return assignments;
 }
 
+// ── Room Script (.asc) Generation ──
+const ASC_DIRECTIONS = [
+  { name: 'Top', dx: 0, dy: -1 },
+  { name: 'Bottom', dx: 0, dy: 1 },
+  { name: 'Left', dx: -1, dy: 0 },
+  { name: 'Right', dx: 1, dy: 0 }
+];
+
+function buildAscDescription(mapName, roomTitle, x, y) {
+  return `// ${mapName} - ${roomTitle} ${coordDisplay(x, y)}`;
+}
+
+function buildLeaveFunction(dir, adjacentRoomId) {
+  return `function room_Leave${dir}()\n{\n  player.ChangeRoomAutoPosition(${adjacentRoomId});\n}`;
+}
+
+function parseLeaveFunction(content, dir) {
+  const funcPattern = new RegExp(`function\\s+room_Leave${dir}\\s*\\(\\s*\\)`);
+  const match = content.match(funcPattern);
+  if (!match) return null;
+
+  const funcStart = match.index;
+  const braceStart = content.indexOf('{', funcStart + match[0].length);
+  if (braceStart === -1) return null;
+
+  let depth = 1;
+  let i = braceStart + 1;
+  while (i < content.length && depth > 0) {
+    if (content[i] === '{') depth++;
+    else if (content[i] === '}') depth--;
+    i++;
+  }
+  if (depth !== 0) return null;
+
+  const funcEnd = i;
+  const body = content.substring(braceStart + 1, funcEnd - 1);
+  const statements = body.split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0 && !line.startsWith('//'));
+
+  const isSimple = statements.length === 1 &&
+    /^player\.ChangeRoomAutoPosition\(\d+\);$/.test(statements[0]);
+
+  return { start: funcStart, end: funcEnd, isSimple, fullText: content.substring(funcStart, funcEnd) };
+}
+
+async function generateRoomScripts() {
+  const changes = [];
+
+  for (const mapId of Object.keys(state.maps)) {
+    const map = state.maps[mapId];
+    for (const key of Object.keys(map.rooms)) {
+      const room = map.rooms[key];
+      if (room.complete || room.roomId === null) continue;
+
+      const roomChanges = {
+        roomId: room.roomId,
+        mapName: map.name,
+        coord: coordDisplay(room.x, room.y),
+        actions: []
+      };
+
+      const description = buildAscDescription(map.name, room.title || '', room.x, room.y);
+
+      // Find adjacent rooms in the same map
+      const adjacencies = {};
+      for (const dir of ASC_DIRECTIONS) {
+        const neighbor = map.rooms[coordKey(room.x + dir.dx, room.y + dir.dy)];
+        if (neighbor && neighbor.roomId !== null) {
+          adjacencies[dir.name] = neighbor.roomId;
+        }
+      }
+
+      let existingContent = '';
+      try {
+        existingContent = await invoke('read_room_script', { projectPath, roomId: room.roomId });
+      } catch (e) {
+        console.error(`Failed to read room${room.roomId}.asc:`, e);
+        continue;
+      }
+
+      let newContent;
+
+      if (!existingContent) {
+        // New file: description + leave functions for adjacent rooms
+        const lines = [description];
+        for (const dir of ASC_DIRECTIONS) {
+          if (adjacencies[dir.name] !== undefined) {
+            lines.push('');
+            lines.push(buildLeaveFunction(dir.name, adjacencies[dir.name]));
+          }
+        }
+        newContent = lines.join('\n') + '\n';
+        roomChanges.actions.push({ type: 'new', detail: 'Created new .asc file' });
+        for (const dir of ASC_DIRECTIONS) {
+          if (adjacencies[dir.name] !== undefined) {
+            roomChanges.actions.push({ type: 'new', detail: `Added room_Leave${dir.name}() → Room ${adjacencies[dir.name]}` });
+          }
+        }
+      } else {
+        // Update existing file
+        newContent = existingContent;
+
+        // Update first // comment line
+        const firstCommentMatch = newContent.match(/^\/\/.*/m);
+        if (firstCommentMatch) {
+          newContent = newContent.substring(0, firstCommentMatch.index) +
+            description +
+            newContent.substring(firstCommentMatch.index + firstCommentMatch[0].length);
+          if (firstCommentMatch[0] !== description) {
+            roomChanges.actions.push({ type: 'update', detail: 'Updated description comment' });
+          }
+        } else {
+          newContent = description + '\n' + newContent;
+          roomChanges.actions.push({ type: 'new', detail: 'Added description comment' });
+        }
+
+        // Process each direction with an adjacent room
+        for (const dir of ASC_DIRECTIONS) {
+          if (adjacencies[dir.name] === undefined) continue;
+
+          const parsed = parseLeaveFunction(newContent, dir.name);
+
+          if (!parsed) {
+            // No existing function — append
+            newContent = newContent.trimEnd() + '\n\n' + buildLeaveFunction(dir.name, adjacencies[dir.name]) + '\n';
+            roomChanges.actions.push({ type: 'new', detail: `Added room_Leave${dir.name}() → Room ${adjacencies[dir.name]}` });
+          } else if (parsed.isSimple) {
+            // Simple function — update room number
+            const updatedFunc = buildLeaveFunction(dir.name, adjacencies[dir.name]);
+            newContent = newContent.substring(0, parsed.start) + updatedFunc + newContent.substring(parsed.end);
+            if (parsed.fullText !== updatedFunc) {
+              roomChanges.actions.push({ type: 'update', detail: `Updated room_Leave${dir.name}() → Room ${adjacencies[dir.name]}` });
+            }
+          } else {
+            // Complex function — skip
+            roomChanges.actions.push({ type: 'skip', detail: `Skipped room_Leave${dir.name}() (complex logic)` });
+          }
+        }
+      }
+
+      // Write if content changed
+      if (newContent !== existingContent) {
+        try {
+          await invoke('write_room_script', { projectPath, roomId: room.roomId, content: newContent });
+        } catch (e) {
+          console.error(`Failed to write room${room.roomId}.asc:`, e);
+          roomChanges.actions.push({ type: 'skip', detail: `Error writing file: ${e}` });
+        }
+      }
+
+      if (roomChanges.actions.length > 0) {
+        changes.push(roomChanges);
+      }
+    }
+  }
+
+  return changes;
+}
+
 $btnGenerate.addEventListener('click', async () => {
+  $btnGenerate.disabled = true;
+
+  // Step 1: Assign room IDs
   const assignments = assignRoomIds();
   if (assignments.length > 0) {
     await saveState();
     renderGrid();
   }
 
-  // Show results in the generate modal
+  // Step 2: Generate/update room scripts
+  const scriptChanges = await generateRoomScripts();
+
+  $btnGenerate.disabled = false;
+  updateGenerateButtonState();
+
+  // Show combined results in the generate modal
   const $summary = document.getElementById('generate-summary');
   const $resultsList = document.getElementById('generate-results-list');
-
-  if (assignments.length === 0) {
-    $summary.value = 'No room IDs were assigned. All rooms either already have IDs, are marked complete, or no IDs are available.';
-    $resultsList.innerHTML = '';
-  } else {
-    $summary.value = `Assigned ${assignments.length} room ID${assignments.length > 1 ? 's' : ''} across all maps.`;
-    $resultsList.innerHTML = assignments.map(a =>
-      `<div style="padding:6px 8px;border-bottom:1px solid #0f3460;font-size:13px;">` +
-      `<span class="change-type new">assigned</span> ` +
-      `Room ${a.roomId} → ${a.mapName} (${a.coord})` +
-      `</div>`
-    ).join('');
+  const parts = [];
+  if (assignments.length > 0) {
+    parts.push(`Assigned ${assignments.length} room ID${assignments.length > 1 ? 's' : ''}.`);
   }
+  if (scriptChanges.length > 0) {
+    parts.push(`Updated ${scriptChanges.length} room script${scriptChanges.length > 1 ? 's' : ''}.`);
+  }
+  if (parts.length === 0) {
+    parts.push('No changes needed. All rooms are either complete, have no IDs, or scripts are already up to date.');
+  }
+  $summary.value = parts.join(' ');
+
+  let html = '';
+  // ID assignment results
+  html += assignments.map(a =>
+    `<div style="padding:6px 8px;border-bottom:1px solid #0f3460;font-size:13px;">` +
+    `<span class="change-type new">assigned</span> ` +
+    `Room ${a.roomId} → ${a.mapName} (${a.coord})` +
+    `</div>`
+  ).join('');
+  // Script generation results
+  scriptChanges.forEach(rc => {
+    html += `<div style="padding:8px 8px 4px;border-bottom:1px solid #0f3460;font-size:13px;">` +
+      `<strong>Room ${rc.roomId}</strong> — ${rc.mapName} (${rc.coord})` +
+      rc.actions.map(a =>
+        `<div style="padding:2px 0 2px 12px;font-size:12px;color:#aaa;">` +
+        `<span class="change-type ${a.type}">${a.type}</span> ${a.detail}</div>`
+      ).join('') +
+      `</div>`;
+  });
+  $resultsList.innerHTML = html;
 
   openGenerateModal();
 });

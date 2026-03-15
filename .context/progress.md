@@ -143,3 +143,40 @@
   - Function declarations are hoisted in JavaScript, so `updateGenerateButtonState()` can be called before its declaration in the source order
   - `const` DOM references defined later in the script are accessible from event handler callbacks since callbacks execute after the full script has loaded
   - The toolbar uses `.group` divs with `.separator` dividers between logical groupings
+
+## US-003: Implement room ID auto-assignment across all maps
+- Added `assignRoomIds()` function that collects used IDs across ALL maps, then assigns lowest available `ROOM_IDS` to non-complete rooms with `roomId === null`
+- Wired Generate button click handler to call `assignRoomIds()`, persist state via `saveState()`, re-render grid, and display results in the generate modal
+- Results modal shows count of assignments and per-room details (room ID, map name, coordinate)
+- If no assignments needed, modal shows explanatory message
+- Complete rooms (`complete: true`) are skipped during assignment
+- If all `ROOM_IDS` are exhausted, remaining rooms are left unassigned without error
+- Files changed:
+  - `src/index.html` — added `assignRoomIds()` function and Generate button click handler
+- **Learnings for future iterations:**
+  - `ROOM_IDS` is a const array `[1,2,3,...,18,300,...,308]` — using `Array.find()` with a Set lookup gives O(n) lowest-available-ID selection
+  - The `assignRoomIds()` function mutates `state.maps` rooms directly (same object references), so `saveState()` after captures all changes
+  - The Generate button click handler is async to `await saveState()` before showing results
+  - The generate modal's `#generate-summary` textarea and `#generate-results-list` div were already set up in US-002's UI shell
+
+## US-004: Generate and update room script (.asc) files
+- Added `generateRoomScripts()` async function that generates/updates `.asc` files for all non-complete rooms with roomIds across all maps
+- Added helper functions: `buildAscDescription()`, `buildLeaveFunction()`, `parseLeaveFunction()`
+- `parseLeaveFunction()` uses brace-depth counting to extract function boundaries and classifies as simple (single `player.ChangeRoomAutoPosition(N);`) or complex (anything else)
+- For new files: creates description comment + `room_Leave<Dir>()` functions for each adjacent room with an ID
+- For existing files: updates first `//` comment line, then per-direction: appends missing functions, updates simple ones, skips complex ones
+- Directions without adjacent rooms leave existing functions untouched (not removed or modified)
+- Complete rooms are skipped entirely
+- Updated Generate button click handler to: (1) assign room IDs, (2) generate/update scripts, (3) display combined results
+- Button is disabled during generation to prevent double-clicks, re-enabled after completion
+- Results modal shows both ID assignment results and per-room script changes with change-type indicators (new/update/skip)
+- Direction constants: Top=(x,y-1), Bottom=(x,y+1), Left=(x-1,y), Right=(x+1,y) per AGS coordinate convention
+- `cargo check` passes with no errors or warnings
+- Files changed:
+  - `src/index.html` — added generation logic and updated Generate button handler
+- **Learnings for future iterations:**
+  - `parseLeaveFunction()` re-parses from current `newContent` each iteration, so position shifts from prior edits are handled correctly
+  - The `^\/\/.*/m` regex with multiline flag finds the first `//` comment line in the file (not just the first line)
+  - `content.trimEnd()` before appending ensures consistent spacing when adding multiple functions
+  - The Generate button handler disables/re-enables the button to prevent concurrent generation runs
+  - AGS uses standard screen coordinates (y increases downward), so Top=y-1 and Bottom=y+1 in stored coordinates, even though the map editor displays y-axis inverted
