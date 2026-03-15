@@ -762,6 +762,43 @@ body {
 }
 
 #empty-state button:hover { background: #1a4a8a; }
+
+/* ── Room Drag-and-Drop ── */
+.room-drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 800;
+  opacity: 0.8;
+  transform: scale(0.95);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.room-cell.drag-source .room-cell-inner {
+  opacity: 0.3;
+  border-style: dashed;
+  border-color: #4fc3f7;
+}
+
+.room-cell.drag-target-swap .room-cell-inner {
+  border-color: #ffb300;
+  border-style: solid;
+  border-width: 2px;
+  background: rgba(255, 179, 0, 0.1);
+}
+
+.drag-drop-indicator {
+  position: absolute;
+  width: 320px;
+  height: 190px;
+  border: 2px dashed #4fc3f7;
+  background: rgba(79, 195, 247, 0.05);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 6;
+  display: none;
+}
 </style>
 </head>
 <body>
@@ -923,6 +960,10 @@ let editingCoord = null; // "x,y" of room being edited
 let prevOffsetMinX = 0;
 let prevOffsetMaxY = 0;
 
+// Room drag-and-drop state
+let roomDrag = null;
+const DRAG_THRESHOLD = 5;
+
 // ══════════════════════════════════════
 //  Persistence
 // ══════════════════════════════════════
@@ -990,6 +1031,42 @@ function parseCoord(key) {
 }
 
 function coordDisplay(x, y) { return `${x}x${y}`; }
+
+function pixelToGridCoord(clientX, clientY) {
+  const rect = $gridContainer.getBoundingClientRect();
+  const localX = (clientX - rect.left) / zoom;
+  const localY = (clientY - rect.top) / zoom;
+
+  const map = getActiveMap();
+  if (!map) return null;
+  const keys = Object.keys(map.rooms);
+  if (keys.length === 0) return null;
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  keys.forEach(k => {
+    const r = map.rooms[k];
+    minX = Math.min(minX, r.x);
+    maxX = Math.max(maxX, r.x);
+    minY = Math.min(minY, r.y);
+    maxY = Math.max(maxY, r.y);
+  });
+
+  const gap = mode === 'display' ? GAP_DISPLAY : GAP_EDIT;
+  const stepX = CELL_W + gap;
+  const stepY = CELL_H + gap;
+
+  const gridX = Math.round((localX - PADDING) / stepX) + minX;
+  const gridY = maxY - Math.round((localY - PADDING) / stepY);
+
+  // Verify cursor is within the cell bounds, not in the gap
+  const cellPx = (gridX - minX) * stepX + PADDING;
+  const cellPy = (maxY - gridY) * stepY + PADDING;
+  if (localX >= cellPx && localX <= cellPx + CELL_W &&
+      localY >= cellPy && localY <= cellPy + CELL_H) {
+    return { x: gridX, y: gridY };
+  }
+  return null;
+}
 
 // Available room IDs from roomXX.asc files in the project
 const ROOM_IDS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,300,301,302,303,304,305,306,307,308];
@@ -1336,10 +1413,23 @@ function renderGrid() {
         });
       }
 
-      // Click to edit room details
-      cell.addEventListener('click', (e) => {
+      // Mousedown to begin potential drag or click
+      cell.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
         if (e.target.classList.contains('plus-btn')) return;
-        openEditPanel(room.x, room.y);
+        if ($editPanel.style.display === 'block') return;
+        e.preventDefault();
+        roomDrag = {
+          startX: e.clientX,
+          startY: e.clientY,
+          roomX: room.x,
+          roomY: room.y,
+          ghost: null,
+          indicator: null,
+          active: false,
+          _lastClientX: e.clientX,
+          _lastClientY: e.clientY
+        };
       });
 
       // Right-click for template marking (only rooms with images)
@@ -1380,6 +1470,176 @@ function renderGrid() {
   }
   prevOffsetMinX = minX;
   prevOffsetMaxY = maxY;
+}
+
+// ══════════════════════════════════════
+//  Room Drag-and-Drop
+// ══════════════════════════════════════
+let dragAutoScrollInterval = null;
+
+function startRoomDrag(roomX, roomY, clientX, clientY) {
+  const sourceCell = $gridContainer.querySelector(
+    `.room-cell[data-x="${roomX}"][data-y="${roomY}"]`
+  );
+  if (!sourceCell) return;
+
+  sourceCell.classList.add('drag-source');
+
+  // Create ghost element from cloned cell content
+  const ghost = document.createElement('div');
+  ghost.className = 'room-drag-ghost';
+  ghost.style.width = CELL_W + 'px';
+  ghost.style.height = CELL_H + 'px';
+  ghost.appendChild(sourceCell.querySelector('.room-cell-inner').cloneNode(true));
+  ghost.style.left = (clientX - CELL_W / 2) + 'px';
+  ghost.style.top = (clientY - CELL_H / 2) + 'px';
+  document.body.appendChild(ghost);
+
+  // Create drop indicator for empty positions
+  const indicator = document.createElement('div');
+  indicator.className = 'drag-drop-indicator';
+  $gridContainer.appendChild(indicator);
+
+  roomDrag.ghost = ghost;
+  roomDrag.indicator = indicator;
+  roomDrag.active = true;
+
+  document.body.style.cursor = 'grabbing';
+  startDragAutoScroll();
+}
+
+function updateRoomDrag(clientX, clientY) {
+  if (!roomDrag || !roomDrag.active) return;
+
+  roomDrag._lastClientX = clientX;
+  roomDrag._lastClientY = clientY;
+
+  // Move ghost to follow cursor
+  roomDrag.ghost.style.left = (clientX - CELL_W / 2) + 'px';
+  roomDrag.ghost.style.top = (clientY - CELL_H / 2) + 'px';
+
+  // Clear previous highlights
+  $gridContainer.querySelectorAll('.drag-target-swap').forEach(el => {
+    el.classList.remove('drag-target-swap');
+  });
+  roomDrag.indicator.style.display = 'none';
+
+  const coord = pixelToGridCoord(clientX, clientY);
+  if (!coord) return;
+  if (coord.x === roomDrag.roomX && coord.y === roomDrag.roomY) return;
+
+  const map = getActiveMap();
+  if (!map) return;
+
+  const targetCell = $gridContainer.querySelector(
+    `.room-cell[data-x="${coord.x}"][data-y="${coord.y}"]`
+  );
+
+  if (targetCell) {
+    // Occupied cell — indicate swap
+    targetCell.classList.add('drag-target-swap');
+  } else {
+    // Empty position — show drop indicator
+    const keys = Object.keys(map.rooms);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    keys.forEach(k => {
+      const r = map.rooms[k];
+      minX = Math.min(minX, r.x);
+      maxX = Math.max(maxX, r.x);
+      minY = Math.min(minY, r.y);
+      maxY = Math.max(maxY, r.y);
+    });
+    const stepX = CELL_W + GAP_EDIT;
+    const stepY = CELL_H + GAP_EDIT;
+    const px = (coord.x - minX) * stepX + PADDING;
+    const py = (maxY - coord.y) * stepY + PADDING;
+    roomDrag.indicator.style.left = px + 'px';
+    roomDrag.indicator.style.top = py + 'px';
+    roomDrag.indicator.style.display = 'block';
+  }
+}
+
+function finishRoomDrag(clientX, clientY) {
+  if (!roomDrag) return;
+
+  const wasActive = roomDrag.active;
+  cleanupDragVisuals();
+
+  if (!wasActive) {
+    roomDrag = null;
+    return;
+  }
+
+  const coord = pixelToGridCoord(clientX, clientY);
+  if (coord && !(coord.x === roomDrag.roomX && coord.y === roomDrag.roomY)) {
+    const map = getActiveMap();
+    if (map) {
+      const srcKey = coordKey(roomDrag.roomX, roomDrag.roomY);
+      const dstKey = coordKey(coord.x, coord.y);
+      const srcRoom = map.rooms[srcKey];
+      const dstRoom = map.rooms[dstKey];
+
+      if (srcRoom) {
+        if (dstRoom) {
+          // Swap
+          srcRoom.x = coord.x;
+          srcRoom.y = coord.y;
+          dstRoom.x = roomDrag.roomX;
+          dstRoom.y = roomDrag.roomY;
+          map.rooms[dstKey] = srcRoom;
+          map.rooms[srcKey] = dstRoom;
+        } else {
+          // Move to empty position
+          srcRoom.x = coord.x;
+          srcRoom.y = coord.y;
+          map.rooms[dstKey] = srcRoom;
+          delete map.rooms[srcKey];
+        }
+        saveState();
+        renderGrid();
+      }
+    }
+  }
+  roomDrag = null;
+}
+
+function cancelRoomDrag() {
+  if (!roomDrag) return;
+  cleanupDragVisuals();
+  roomDrag = null;
+}
+
+function cleanupDragVisuals() {
+  if (roomDrag.ghost) roomDrag.ghost.remove();
+  if (roomDrag.indicator) roomDrag.indicator.remove();
+  $gridContainer.querySelectorAll('.drag-source, .drag-target-swap').forEach(el => {
+    el.classList.remove('drag-source', 'drag-target-swap');
+  });
+  document.body.style.cursor = '';
+  stopDragAutoScroll();
+}
+
+function startDragAutoScroll() {
+  if (dragAutoScrollInterval) return;
+  dragAutoScrollInterval = setInterval(() => {
+    if (!roomDrag || !roomDrag.active) { stopDragAutoScroll(); return; }
+    const rect = $viewport.getBoundingClientRect();
+    const margin = 40;
+    const speed = 8;
+    const cx = roomDrag._lastClientX || 0;
+    const cy = roomDrag._lastClientY || 0;
+    if (cx < rect.left + margin) $viewport.scrollLeft -= speed;
+    if (cx > rect.right - margin) $viewport.scrollLeft += speed;
+    if (cy < rect.top + margin) $viewport.scrollTop -= speed;
+    if (cy > rect.bottom - margin) $viewport.scrollTop += speed;
+  }, 16);
+}
+
+function stopDragAutoScroll() {
+  if (dragAutoScrollInterval) {
+    clearInterval(dragAutoScrollInterval);
+    dragAutoScrollInterval = null;
+  }
 }
 
 // ══════════════════════════════════════
@@ -2280,6 +2540,49 @@ async function selectProject(path, name) {
 $toolbar.style.display = 'none';
 $viewport.style.display = 'none';
 loadRecentProjects();
+
+// ══════════════════════════════════════
+//  Room Drag Global Listeners
+// ══════════════════════════════════════
+document.addEventListener('mousemove', (e) => {
+  if (!roomDrag || mode !== 'edit') return;
+
+  if (!roomDrag.active) {
+    const dx = e.clientX - roomDrag.startX;
+    const dy = e.clientY - roomDrag.startY;
+    if (Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) return;
+    startRoomDrag(roomDrag.roomX, roomDrag.roomY, e.clientX, e.clientY);
+  } else {
+    updateRoomDrag(e.clientX, e.clientY);
+  }
+});
+
+document.addEventListener('mouseup', (e) => {
+  if (!roomDrag || mode !== 'edit') return;
+
+  if (!roomDrag.active) {
+    // Threshold not exceeded — treat as a click
+    const { roomX, roomY } = roomDrag;
+    roomDrag = null;
+    openEditPanel(roomX, roomY);
+    return;
+  }
+  finishRoomDrag(e.clientX, e.clientY);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && roomDrag && roomDrag.active) {
+    cancelRoomDrag();
+  }
+});
+
+document.addEventListener('contextmenu', () => {
+  if (roomDrag && roomDrag.active) cancelRoomDrag();
+});
+
+window.addEventListener('blur', () => {
+  if (roomDrag) cancelRoomDrag();
+});
 </script>
 </body>
 </html>
