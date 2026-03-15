@@ -1525,8 +1525,18 @@ const ASC_DIRECTIONS = [
   { name: 'Right', dx: 1, dy: 0 }
 ];
 
+function buildDescription(mapName, roomTitle, x, y) {
+  const fmt = (state.settings && state.settings.descriptionFormat) || '{MAP} - {TITLE} {COORDS}';
+  return fmt
+    .replace(/\{MAP\}/g, mapName)
+    .replace(/\{TITLE\}/g, roomTitle)
+    .replace(/\{COORDS\}/g, coordDisplay(x, y))
+    .replace(/\{X\}/g, x)
+    .replace(/\{Y\}/g, y);
+}
+
 function buildAscDescription(mapName, roomTitle, x, y) {
-  return `// ${mapName} - ${roomTitle} ${coordDisplay(x, y)}`;
+  return `// ${buildDescription(mapName, roomTitle, x, y)}`;
 }
 
 function buildLeaveFunction(dir, adjacentRoomId) {
@@ -1693,7 +1703,7 @@ async function updateGameAgf() {
       if (room.complete || room.roomId === null) continue;
       roomEntries.push({
         roomId: room.roomId,
-        description: `${map.name} - ${room.title || ''} ${coordDisplay(room.x, room.y)}`,
+        description: buildDescription(map.name, room.title || '', room.x, room.y),
         mapName: map.name,
         coord: coordDisplay(room.x, room.y)
       });
