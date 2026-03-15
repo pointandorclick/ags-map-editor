@@ -1069,7 +1069,16 @@ function pixelToGridCoord(clientX, clientY) {
 }
 
 // Available room IDs from roomXX.asc files in the project
-const ROOM_IDS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,300,301,302,303,304,305,306,307,308];
+let ROOM_IDS = [];
+
+async function refreshRoomIds() {
+  if (!projectPath) return;
+  try {
+    ROOM_IDS = await invoke('list_room_ids', { projectPath });
+  } catch (e) {
+    console.error('Failed to list room IDs:', e);
+  }
+}
 
 function makeRoom(x, y) {
   return {
@@ -1683,12 +1692,14 @@ document.getElementById('ctx-mark-template').addEventListener('click', () => {
 // ══════════════════════════════════════
 //  Edit Panel
 // ══════════════════════════════════════
-function openEditPanel(x, y) {
+async function openEditPanel(x, y) {
   editingCoord = coordKey(x, y);
   const map = getActiveMap();
   if (!map) return;
   const room = map.rooms[editingCoord];
   if (!room) return;
+
+  await refreshRoomIds();
 
   $editCoord.textContent = coordDisplay(x, y);
 
@@ -1911,7 +1922,8 @@ $settingsOverlay.addEventListener('click', (e) => {
 });
 
 // ── Room ID Auto-Assignment ──
-function assignRoomIds() {
+async function assignRoomIds() {
+  await refreshRoomIds();
   // Collect all used room IDs across ALL maps
   const usedIds = new Set();
   for (const mapId of Object.keys(state.maps)) {
@@ -1935,19 +1947,23 @@ function assignRoomIds() {
     }
   }
 
-  // Assign lowest available IDs
+  // Assign next available IDs (skip IDs already used by maps or existing room files)
+  const existingFileIds = new Set(ROOM_IDS);
   const assignments = [];
+  let nextId = 1;
   for (const entry of unassigned) {
-    const availableId = ROOM_IDS.find(id => !usedIds.has(id));
-    if (availableId === undefined) break; // no more IDs available
-    entry.room.roomId = availableId;
-    usedIds.add(availableId);
+    while (usedIds.has(nextId) || existingFileIds.has(nextId)) {
+      nextId++;
+    }
+    entry.room.roomId = nextId;
+    usedIds.add(nextId);
     assignments.push({
       mapId: entry.mapId,
       mapName: state.maps[entry.mapId].name,
       coord: entry.key,
-      roomId: availableId
+      roomId: nextId
     });
+    nextId++;
   }
 
   return assignments;
@@ -2315,7 +2331,7 @@ $btnGenerate.addEventListener('click', async () => {
   $btnGenerate.disabled = true;
 
   // Step 1: Assign room IDs
-  const assignments = assignRoomIds();
+  const assignments = await assignRoomIds();
   if (assignments.length > 0) {
     await saveState();
     renderGrid();
@@ -2529,6 +2545,7 @@ async function selectProject(path, name) {
   $toolbar.style.display = '';
   $viewport.style.display = '';
   await loadState();
+  await refreshRoomIds();
   refreshMapSelect();
   renderGrid();
 }

@@ -180,6 +180,26 @@ fn export_background_image(
 }
 
 #[tauri::command]
+fn list_room_ids(project_path: String) -> Result<Vec<u32>, String> {
+    let dir = Path::new(&project_path);
+    let mut ids: Vec<u32> = fs::read_dir(dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with("room") && name.ends_with(".asc") {
+                name[4..name.len() - 4].parse::<u32>().ok()
+            } else {
+                None
+            }
+        })
+        .collect();
+    ids.sort();
+    ids.dedup();
+    Ok(ids)
+}
+
+#[tauri::command]
 fn check_file_exists(file_path: String) -> Result<bool, String> {
     Ok(Path::new(&file_path).exists())
 }
@@ -217,6 +237,7 @@ pub fn run() {
             read_game_agf,
             write_game_agf,
             export_background_image,
+            list_room_ids,
             check_file_exists,
             check_background_matches,
         ])
