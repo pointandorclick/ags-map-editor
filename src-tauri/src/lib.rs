@@ -184,6 +184,23 @@ fn check_file_exists(file_path: String) -> Result<bool, String> {
     Ok(Path::new(&file_path).exists())
 }
 
+#[tauri::command]
+fn check_background_matches(
+    project_path: String,
+    filename: String,
+    base64_data: String,
+) -> Result<bool, String> {
+    let file_path = Path::new(&project_path).join("Backgrounds").join(&filename);
+    if !file_path.exists() {
+        return Ok(false);
+    }
+    let existing = fs::read(&file_path).map_err(|e| e.to_string())?;
+    let new_data = base64::engine::general_purpose::STANDARD
+        .decode(&base64_data)
+        .map_err(|e| e.to_string())?;
+    Ok(existing == new_data)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -201,6 +218,7 @@ pub fn run() {
             write_game_agf,
             export_background_image,
             check_file_exists,
+            check_background_matches,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
