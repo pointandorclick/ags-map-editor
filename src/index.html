@@ -1473,6 +1473,76 @@ $generateOverlay.addEventListener('click', (e) => {
   }
 });
 
+// ── Room ID Auto-Assignment ──
+function assignRoomIds() {
+  // Collect all used room IDs across ALL maps
+  const usedIds = new Set();
+  for (const mapId of Object.keys(state.maps)) {
+    const rooms = state.maps[mapId].rooms;
+    for (const key of Object.keys(rooms)) {
+      if (rooms[key].roomId !== null) {
+        usedIds.add(rooms[key].roomId);
+      }
+    }
+  }
+
+  // Collect all unassigned, non-complete rooms across all maps
+  const unassigned = [];
+  for (const mapId of Object.keys(state.maps)) {
+    const rooms = state.maps[mapId].rooms;
+    for (const key of Object.keys(rooms)) {
+      const room = rooms[key];
+      if (room.roomId === null && !room.complete) {
+        unassigned.push({ mapId, key, room });
+      }
+    }
+  }
+
+  // Assign lowest available IDs
+  const assignments = [];
+  for (const entry of unassigned) {
+    const availableId = ROOM_IDS.find(id => !usedIds.has(id));
+    if (availableId === undefined) break; // no more IDs available
+    entry.room.roomId = availableId;
+    usedIds.add(availableId);
+    assignments.push({
+      mapId: entry.mapId,
+      mapName: state.maps[entry.mapId].name,
+      coord: entry.key,
+      roomId: availableId
+    });
+  }
+
+  return assignments;
+}
+
+$btnGenerate.addEventListener('click', async () => {
+  const assignments = assignRoomIds();
+  if (assignments.length > 0) {
+    await saveState();
+    renderGrid();
+  }
+
+  // Show results in the generate modal
+  const $summary = document.getElementById('generate-summary');
+  const $resultsList = document.getElementById('generate-results-list');
+
+  if (assignments.length === 0) {
+    $summary.value = 'No room IDs were assigned. All rooms either already have IDs, are marked complete, or no IDs are available.';
+    $resultsList.innerHTML = '';
+  } else {
+    $summary.value = `Assigned ${assignments.length} room ID${assignments.length > 1 ? 's' : ''} across all maps.`;
+    $resultsList.innerHTML = assignments.map(a =>
+      `<div style="padding:6px 8px;border-bottom:1px solid #0f3460;font-size:13px;">` +
+      `<span class="change-type new">assigned</span> ` +
+      `Room ${a.roomId} → ${a.mapName} (${a.coord})` +
+      `</div>`
+    ).join('');
+  }
+
+  openGenerateModal();
+});
+
 // ══════════════════════════════════════
 //  Project Selection Overlay
 // ══════════════════════════════════════
