@@ -413,6 +413,97 @@ body {
   display: none;
 }
 
+/* ── Project Selection Overlay ── */
+#project-overlay {
+  position: fixed;
+  inset: 0;
+  background: #1a1a2e;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#project-overlay .overlay-content {
+  text-align: center;
+  max-width: 480px;
+  width: 90%;
+}
+
+#project-overlay h1 {
+  font-size: 28px;
+  color: #e0e0e0;
+  margin-bottom: 32px;
+  font-weight: 600;
+}
+
+#project-overlay .open-btn {
+  background: #e94560;
+  color: #fff;
+  border: none;
+  padding: 12px 28px;
+  border-radius: 6px;
+  font-size: 15px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+#project-overlay .open-btn:hover {
+  background: #d63a55;
+}
+
+#project-overlay .error-msg {
+  color: #e94560;
+  font-size: 13px;
+  margin-top: 12px;
+  min-height: 20px;
+}
+
+#project-overlay .recent-section {
+  margin-top: 36px;
+  text-align: left;
+}
+
+#project-overlay .recent-section h2 {
+  font-size: 14px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+#project-overlay .recent-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+#project-overlay .recent-list li {
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+#project-overlay .recent-list li:hover {
+  background: #16213e;
+  border-color: #0f3460;
+}
+
+#project-overlay .recent-list .project-name {
+  font-size: 14px;
+  color: #e0e0e0;
+}
+
+#project-overlay .recent-list .project-path {
+  font-size: 11px;
+  color: #666;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ── Empty state ── */
 #empty-state {
   position: absolute;
@@ -439,6 +530,19 @@ body {
 </style>
 </head>
 <body>
+
+<!-- Project Selection Overlay -->
+<div id="project-overlay">
+  <div class="overlay-content">
+    <h1>AGS Map Editor</h1>
+    <button class="open-btn" id="btn-open-project">Open AGS Project...</button>
+    <div class="error-msg" id="project-error"></div>
+    <div class="recent-section" id="recent-section" style="display:none;">
+      <h2>Recent Projects</h2>
+      <ul class="recent-list" id="recent-list"></ul>
+    </div>
+  </div>
+</div>
 
 <!-- Toolbar -->
 <div id="toolbar">
@@ -1188,11 +1292,88 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ══════════════════════════════════════
+//  Project Selection Overlay
+// ══════════════════════════════════════
+let projectPath = null;
+const { invoke } = window.__TAURI__.core;
+
+const $projectOverlay = document.getElementById('project-overlay');
+const $projectError = document.getElementById('project-error');
+const $recentSection = document.getElementById('recent-section');
+const $recentList = document.getElementById('recent-list');
+const $toolbar = document.getElementById('toolbar');
+
+async function loadRecentProjects() {
+  try {
+    const projects = await invoke('get_recent_projects');
+    if (projects.length === 0) {
+      $recentSection.style.display = 'none';
+      return;
+    }
+    $recentSection.style.display = 'block';
+    $recentList.innerHTML = '';
+    projects.forEach(project => {
+      const li = document.createElement('li');
+      li.innerHTML = `<div class="project-name">${project.name}</div><div class="project-path">${project.path}</div>`;
+      li.addEventListener('click', () => openRecentProject(project));
+      $recentList.appendChild(li);
+    });
+  } catch (e) {
+    console.error('Failed to load recent projects:', e);
+  }
+}
+
+async function openRecentProject(project) {
+  $projectError.textContent = '';
+  try {
+    await invoke('validate_project', { path: project.path });
+    await selectProject(project.path, project.name);
+  } catch (e) {
+    $projectError.textContent = e;
+    // Remove invalid project from the list
+    const items = $recentList.querySelectorAll('li');
+    items.forEach(li => {
+      if (li.querySelector('.project-path').textContent === project.path) {
+        li.remove();
+      }
+    });
+    if ($recentList.children.length === 0) {
+      $recentSection.style.display = 'none';
+    }
+  }
+}
+
+document.getElementById('btn-open-project').addEventListener('click', async () => {
+  $projectError.textContent = '';
+  try {
+    const path = await invoke('pick_project_folder');
+    const name = path.split('/').pop() || path.split('\\').pop() || path;
+    await selectProject(path, name);
+  } catch (e) {
+    if (e !== 'No folder selected') {
+      $projectError.textContent = e;
+    }
+  }
+});
+
+async function selectProject(path, name) {
+  projectPath = path;
+  await invoke('add_recent_project', { path, name });
+  $projectOverlay.style.display = 'none';
+  $toolbar.style.display = '';
+  $viewport.style.display = '';
+  loadState();
+  refreshMapSelect();
+  renderGrid();
+}
+
+// ══════════════════════════════════════
 //  Init
 // ══════════════════════════════════════
-loadState();
-refreshMapSelect();
-renderGrid();
+// Hide main UI until a project is selected
+$toolbar.style.display = 'none';
+$viewport.style.display = 'none';
+loadRecentProjects();
 </script>
 </body>
 </html>
