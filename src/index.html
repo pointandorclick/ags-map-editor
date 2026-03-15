@@ -632,7 +632,6 @@ const CELL_H = 190;
 const GAP_EDIT = 48; // space between cells in edit mode (room for + buttons)
 const GAP_DISPLAY = 4; // tighter gap in display mode
 const PADDING = 200; // extra padding around grid for scrolling
-const STORAGE_KEY = 'sq-map-builder';
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 2;
 const ZOOM_STEP = 0.1;
@@ -655,22 +654,24 @@ let prevOffsetMaxY = 0;
 // ══════════════════════════════════════
 //  Persistence
 // ══════════════════════════════════════
-function loadState() {
+async function loadState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = await invoke('load_project_data', { projectPath });
     if (raw) {
-      const parsed = JSON.parse(raw);
-      state = parsed;
+      state = JSON.parse(raw);
       if (!state.templates) state.templates = {};
+    } else {
+      state = { maps: {}, activeMapId: null, templates: {} };
     }
   } catch (e) {
     console.error('Failed to load state:', e);
+    state = { maps: {}, activeMapId: null, templates: {} };
   }
 }
 
-function saveState() {
+async function saveState() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    await invoke('save_project_data', { projectPath, data: JSON.stringify(state) });
   } catch (e) {
     console.error('Failed to save state:', e);
   }
@@ -1362,7 +1363,7 @@ async function selectProject(path, name) {
   $projectOverlay.style.display = 'none';
   $toolbar.style.display = '';
   $viewport.style.display = '';
-  loadState();
+  await loadState();
   refreshMapSelect();
   renderGrid();
 }

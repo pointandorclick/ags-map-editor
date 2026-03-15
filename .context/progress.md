@@ -8,6 +8,7 @@
 - `tauri_plugin_dialog::DialogExt` trait provides `.dialog()` on `AppHandle` for native dialogs
 - `app_handle.path().app_data_dir()` provides the platform-specific app data directory
 - `FilePath::into_path()` converts dialog results to `PathBuf`
+- Frontend calls Tauri commands via `window.__TAURI__.core.invoke()` (requires `withGlobalTauri: true` in `tauri.conf.json`)
 
 ## US-001: Copy source files into workspace
 - Copied 9 source files from the original project to the workspace at their correct relative paths
@@ -61,3 +62,38 @@
   - `app_handle.path().app_data_dir()` (via `Manager` trait) gives platform-specific app data directory
   - `serde_json` already in `Cargo.toml` dependencies — no new crates needed for JSON operations
   - All commands use `Result<T, String>` which Tauri serializes to IPC success/error responses
+
+## US-004: Add project selection screen overlay
+- Added full-screen project selection overlay to `src/index.html` shown on startup
+- Overlay includes 'AGS Map Editor' title, 'Open AGS Project...' button, and 'Recent Projects' section
+- 'Open AGS Project...' button calls `pick_project_folder` Tauri command via IPC
+- Recent projects loaded from `get_recent_projects` command, each showing name and path
+- Clicking a recent project calls `validate_project` first; if invalid, shows error and removes from list
+- After successful selection: calls `add_recent_project`, sets global `projectPath`, hides overlay, shows main UI
+- Styled to match existing dark theme (#1a1a2e background, #e94560 accent for primary button)
+- Toolbar and viewport hidden while overlay is visible
+- Added `withGlobalTauri: true` to `tauri.conf.json` to enable `window.__TAURI__` for frontend IPC
+- Files changed:
+  - `src/index.html` — overlay HTML, CSS, and JavaScript
+  - `src-tauri/tauri.conf.json` — added `withGlobalTauri: true`
+- **Learnings for future iterations:**
+  - Tauri v2 requires `"withGlobalTauri": true` in `app` section of `tauri.conf.json` for non-bundled frontends to access `window.__TAURI__`
+  - `window.__TAURI__.core.invoke('command_name', { arg1, arg2 })` is the IPC call pattern
+  - Tauri command errors are returned as strings in the catch block (not Error objects)
+  - The `pick_project_folder` command returns the error string `"No folder selected"` when the user cancels the dialog
+
+## US-005: Replace localStorage with file-based .agm persistence
+- Replaced `loadState()` with async version that calls `invoke('load_project_data', { projectPath })` and parses returned JSON
+- Replaced `saveState()` with async version that calls `invoke('save_project_data', { projectPath, data: JSON.stringify(state) })`
+- Removed the `STORAGE_KEY` constant
+- Eliminated all `localStorage` references from the codebase
+- Updated `selectProject()` to `await loadState()` before calling `refreshMapSelect()` and `renderGrid()`
+- Init flow is now async: project selection → await loadState() → refreshMapSelect() → renderGrid()
+- All existing callers of `saveState()` (createMap, deleteMap, map select change, map rename, addRoom, removeRoom, updateRoom, addTemplate, mark-as-template) fire-and-forget the async call — no await needed
+- Files changed:
+  - `src/index.html` — replaced persistence functions and removed localStorage
+- **Learnings for future iterations:**
+  - Making `saveState()` async is safe for fire-and-forget callers — JavaScript will execute the async body without blocking
+  - `loadState()` must be awaited at startup to ensure state is populated before rendering
+  - The `projectPath` global (set in US-004's `selectProject()`) is shared by both `loadState()` and `saveState()`
+  - On load failure or empty data, state is initialized to `{ maps: {}, activeMapId: null, templates: {} }` to match the default
