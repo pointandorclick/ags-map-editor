@@ -6,6 +6,8 @@
 
 A desktop application for visually designing room maps for [Adventure Game Studio](https://www.adventuregamestudio.co.uk/) (AGS) projects.
 
+![AGS Map Editor Screenshot](screenshot.png)
+
 ## Overview
 
 AGS Map Editor lets you lay out your game's rooms on a spatial grid, assign AGS room numbers, attach concept art, and add notes — all saved directly into your AGS project folder. It gives you a bird's-eye view of how your game world fits together.
@@ -59,7 +61,7 @@ Click a room to open its edit panel where you can set:
 
 ### Templates
 
-Right-click a room that has an image to mark it as a **template**. Templates are reusable room designs that can be assigned to other rooms, reducing repetitive work when many rooms share a similar layout.
+Right-click a room that has an image to mark it as a **template**. Templates are reusable room designs that can be assigned to other rooms, reducing repetitive work when many rooms share a similar layout. Templates are represented with a red border around them on the map for reference only.
 
 ### Display Mode
 
