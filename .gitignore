@@ -12,3 +12,5 @@ src-tauri/gen/schemas/
 
 # macOS
 .DS_Store
+
+.context

@@ -3,6 +3,7 @@
   "description": "Default capabilities for the AGS Map Editor",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "dialog:default"
   ]
 }
