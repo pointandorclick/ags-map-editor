@@ -1,0 +1,20 @@
+{
+  "productName": "AGS Map Editor",
+  "version": "0.1.0",
+  "identifier": "com.pointandclick.ags-map-editor",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "AGS Map Editor",
+        "width": 1280,
+        "height": 800
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

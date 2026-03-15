@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sierra Quest - Map Builder</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ── Toolbar ── */
+#toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #16213e;
+  border-bottom: 1px solid #0f3460;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+#toolbar .group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#toolbar .separator {
+  width: 1px;
+  height: 24px;
+  background: #0f3460;
+  margin: 0 4px;
+}
+
+#toolbar select {
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #0f3460;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  min-width: 140px;
+}
+
+#toolbar button {
+  background: #0f3460;
+  color: #e0e0e0;
+  border: 1px solid #1a4a8a;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#toolbar button:hover { background: #1a4a8a; }
+
+#toolbar button.active {
+  background: #e94560;
+  border-color: #e94560;
+}
+
+#toolbar .zoom-display {
+  font-size: 12px;
+  color: #888;
+  min-width: 40px;
+  text-align: center;
+}
+
+#toolbar label {
+  font-size: 13px;
+  color: #aaa;
+}
+
+/* ── Viewport ── */
+#viewport {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  background: #12121f;
+}
+
+#grid-container {
+  position: relative;
+  transform-origin: 0 0;
+}
+
+/* ── Room Cell ── */
+.room-cell {
+  position: absolute;
+  width: 320px;
+  height: 190px;
+  cursor: pointer;
+}
+
+.room-cell-inner {
+  width: 320px;
+  height: 190px;
+  overflow: hidden;
+  position: relative;
+  border: 2px dashed #333;
+  background: #1e1e30;
+}
+
+.room-cell.has-image .room-cell-inner {
+  border: 2px solid #333;
+}
+
+.room-cell.is-template .room-cell-inner {
+  border: 2px solid #e94560;
+}
+
+/* ── Complete badge ── */
+.complete-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  background: #2ecc40;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+.complete-badge svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.room-cell-inner img {
+  width: 320px;
+  height: 200px;
+  margin-top: -10px;
+  display: block;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+.room-cell.drag-over .room-cell-inner {
+  border-color: #4fc3f7;
+  background: #1a2a4e;
+}
+
+/* ── Coordinate label ── */
+.coord-label {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 10px;
+  color: #666;
+  pointer-events: none;
+}
+
+.room-cell.has-image .room-cell-inner .coord-label {
+  background: rgba(0,0,0,0.6);
+  color: #aaa;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+/* ── Title overlay (display mode) ── */
+.title-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 12px;
+  padding: 3px 6px;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Plus buttons ── */
+.plus-btn {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  background: #0f3460;
+  color: #e0e0e0;
+  border: 1px solid #1a4a8a;
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 26px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.room-cell:hover .plus-btn { opacity: 1; }
+
+.plus-btn:hover { background: #1a4a8a; }
+
+.plus-btn.top    { top: -36px;  left: 50%; transform: translateX(-50%); }
+.plus-btn.bottom { bottom: -36px; left: 50%; transform: translateX(-50%); }
+.plus-btn.left   { left: -36px; top: 50%; transform: translateY(-50%); }
+.plus-btn.right  { right: -36px; top: 50%; transform: translateY(-50%); }
+
+/* ── Context menu ── */
+#context-menu {
+  position: fixed;
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 4px;
+  padding: 4px 0;
+  z-index: 1000;
+  display: none;
+  min-width: 160px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+#context-menu .menu-item {
+  padding: 6px 16px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#context-menu .menu-item:hover {
+  background: #0f3460;
+}
+
+/* ── Edit Panel ── */
+#edit-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 8px;
+  padding: 20px;
+  z-index: 500;
+  width: 380px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  display: none;
+}
+
+#edit-panel h3 {
+  margin-bottom: 12px;
+  font-size: 15px;
+  color: #4fc3f7;
+}
+
+#edit-panel label {
+  display: block;
+  font-size: 12px;
+  color: #aaa;
+  margin-bottom: 4px;
+  margin-top: 10px;
+}
+
+#edit-panel input[type="text"],
+#edit-panel textarea,
+#edit-panel select {
+  width: 100%;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #0f3460;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+#edit-panel textarea {
+  height: 80px;
+  resize: vertical;
+}
+
+#edit-panel .btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+#edit-panel .btn-row button {
+  background: #0f3460;
+  color: #e0e0e0;
+  border: 1px solid #1a4a8a;
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#edit-panel .btn-row button:hover { background: #1a4a8a; }
+
+#edit-panel .btn-row button.save {
+  background: #2e7d32;
+  border-color: #388e3c;
+}
+
+#edit-panel .btn-row button.save:hover { background: #388e3c; }
+
+#edit-panel .btn-row button.danger {
+  background: #b71c1c;
+  border-color: #c62828;
+}
+
+#edit-panel .btn-row button.danger:hover { background: #c62828; }
+
+/* ── Display Modal ── */
+#room-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 900;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+#room-modal-overlay.visible {
+  display: flex;
+}
+
+#room-modal {
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 600px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+
+#room-modal img {
+  width: 100%;
+  max-width: 320px;
+  display: block;
+  margin: 0 auto 16px;
+  border-radius: 4px;
+  image-rendering: pixelated;
+}
+
+#room-modal h2 {
+  font-size: 18px;
+  margin-bottom: 8px;
+  color: #4fc3f7;
+}
+
+#room-modal .meta {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 12px;
+}
+
+#room-modal .meta span {
+  margin-right: 16px;
+}
+
+#room-modal .notes {
+  font-size: 13px;
+  color: #ccc;
+  white-space: pre-wrap;
+  background: #1a1a2e;
+  padding: 10px;
+  border-radius: 4px;
+  margin-top: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+#room-modal .close-btn {
+  display: block;
+  margin: 16px auto 0;
+  background: #0f3460;
+  color: #e0e0e0;
+  border: 1px solid #1a4a8a;
+  padding: 6px 20px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#room-modal .close-btn:hover { background: #1a4a8a; }
+
+/* ── Overlay backdrop for edit panel ── */
+.overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 499;
+  display: none;
+}
+
+/* ── Empty state ── */
+#empty-state {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: #555;
+  font-size: 14px;
+}
+
+#empty-state button {
+  margin-top: 12px;
+  background: #0f3460;
+  color: #e0e0e0;
+  border: 1px solid #1a4a8a;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#empty-state button:hover { background: #1a4a8a; }
+</style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div id="toolbar">
+  <div class="group">
+    <label>Map:</label>
+    <select id="map-select"></select>
+    <button id="btn-new-map">New</button>
+    <button id="btn-edit-map">Edit</button>
+    <button id="btn-delete-map">Delete</button>
+  </div>
+  <div class="separator"></div>
+  <div class="group">
+    <button id="btn-mode-edit" class="active">Edit</button>
+    <button id="btn-mode-display">Display</button>
+  </div>
+  <div class="separator"></div>
+  <div class="group" id="zoom-controls" style="display:none;">
+    <button id="btn-zoom-out">-</button>
+    <span class="zoom-display" id="zoom-display">100%</span>
+    <button id="btn-zoom-in">+</button>
+  </div>
+</div>
+
+<!-- Viewport -->
+<div id="viewport">
+  <div id="grid-container"></div>
+  <div id="empty-state" style="display:none;">
+    <p>No maps yet. Create one to get started.</p>
+    <button id="btn-empty-new-map">Create New Map</button>
+  </div>
+</div>
+
+<!-- Context Menu -->
+<div id="context-menu">
+  <div class="menu-item" id="ctx-mark-template">Mark as Template</div>
+</div>
+
+<!-- Edit Panel Backdrop -->
+<div class="overlay-backdrop" id="edit-backdrop"></div>
+
+<!-- Edit Panel -->
+<div id="edit-panel">
+  <h3>Edit Room <span id="edit-coord"></span></h3>
+  <label>Room ID</label>
+  <select id="edit-room-id">
+    <option value="">(None)</option>
+  </select>
+  <label>Title</label>
+  <input type="text" id="edit-title" placeholder="Room title...">
+  <label>Template</label>
+  <select id="edit-template">
+    <option value="">(None)</option>
+  </select>
+  <label>Notes</label>
+  <textarea id="edit-notes" placeholder="Free text notes..."></textarea>
+  <label style="display:flex;align-items:center;gap:8px;margin:8px 0;cursor:pointer;user-select:none">
+    <input type="checkbox" id="edit-complete"> Complete (skip AGS code generation)
+  </label>
+  <div class="btn-row">
+    <button class="danger" id="btn-delete-room">Delete Room</button>
+    <button id="btn-edit-cancel">Cancel</button>
+    <button class="save" id="btn-edit-save">Save</button>
+  </div>
+</div>
+
+<!-- Display Modal -->
+<div id="room-modal-overlay">
+  <div id="room-modal">
+    <img id="modal-img" src="" alt="Room screenshot">
+    <h2 id="modal-title"></h2>
+    <div class="meta">
+      <span id="modal-room-id"></span>
+      <span id="modal-coord"></span>
+      <span id="modal-filename"></span>
+    </div>
+    <div class="notes" id="modal-notes"></div>
+    <button class="close-btn" id="btn-modal-close">Close</button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+//  Constants
+// ══════════════════════════════════════
+const CELL_W = 320;
+const CELL_H = 190;
+const GAP_EDIT = 48; // space between cells in edit mode (room for + buttons)
+const GAP_DISPLAY = 4; // tighter gap in display mode
+const PADDING = 200; // extra padding around grid for scrolling
+const STORAGE_KEY = 'sq-map-builder';
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 2;
+const ZOOM_STEP = 0.1;
+
+// ══════════════════════════════════════
+//  State
+// ══════════════════════════════════════
+let state = {
+  maps: {},
+  activeMapId: null,
+  templates: {}
+};
+
+let mode = 'edit'; // 'edit' or 'display'
+let zoom = 1;
+let editingCoord = null; // "x,y" of room being edited
+let prevOffsetMinX = 0;
+let prevOffsetMaxY = 0;
+
+// ══════════════════════════════════════
+//  Persistence
+// ══════════════════════════════════════
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      state = parsed;
+      if (!state.templates) state.templates = {};
+    }
+  } catch (e) {
+    console.error('Failed to load state:', e);
+  }
+}
+
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.error('Failed to save state:', e);
+  }
+}
+
+// ══════════════════════════════════════
+//  Map CRUD
+// ══════════════════════════════════════
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function createMap(name) {
+  const id = generateId();
+  state.maps[id] = { name, rooms: {} };
+  state.activeMapId = id;
+  // Add initial room at 0,0
+  state.maps[id].rooms['0,0'] = makeRoom(0, 0);
+  saveState();
+  return id;
+}
+
+function deleteMap(id) {
+  delete state.maps[id];
+  const ids = Object.keys(state.maps);
+  state.activeMapId = ids.length > 0 ? ids[0] : null;
+  saveState();
+}
+
+function getActiveMap() {
+  if (!state.activeMapId || !state.maps[state.activeMapId]) return null;
+  return state.maps[state.activeMapId];
+}
+
+// ══════════════════════════════════════
+//  Room CRUD
+// ══════════════════════════════════════
+function coordKey(x, y) { return `${x},${y}`; }
+
+function parseCoord(key) {
+  const [x, y] = key.split(',').map(Number);
+  return { x, y };
+}
+
+function coordDisplay(x, y) { return `${x}x${y}`; }
+
+// Available room IDs from roomXX.asc files in the project
+const ROOM_IDS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,300,301,302,303,304,305,306,307,308];
+
+function makeRoom(x, y) {
+  return {
+    x, y,
+    roomId: null,
+    title: '',
+    notes: '',
+    imageDataUrl: null,
+    imageFilename: null,
+    isTemplate: false,
+    templateId: null,
+    complete: false
+  };
+}
+
+function addRoom(x, y) {
+  const map = getActiveMap();
+  if (!map) return;
+  const key = coordKey(x, y);
+  if (!map.rooms[key]) {
+    map.rooms[key] = makeRoom(x, y);
+    saveState();
+  }
+}
+
+function removeRoom(x, y) {
+  const map = getActiveMap();
+  if (!map) return;
+  delete map.rooms[coordKey(x, y)];
+  // If no rooms left, add back 0,0
+  if (Object.keys(map.rooms).length === 0) {
+    map.rooms['0,0'] = makeRoom(0, 0);
+  }
+  saveState();
+}
+
+function updateRoom(x, y, updates) {
+  const map = getActiveMap();
+  if (!map) return;
+  const key = coordKey(x, y);
+  if (map.rooms[key]) {
+    Object.assign(map.rooms[key], updates);
+    saveState();
+  }
+}
+
+// ══════════════════════════════════════
+//  Template Management
+// ══════════════════════════════════════
+function addTemplate(name, imageDataUrl, sourceCoord, sourceMapId) {
+  const id = generateId();
+  state.templates[id] = { name, imageDataUrl, sourceCoord, sourceMapId };
+  saveState();
+  return id;
+}
+
+function getTemplates() {
+  return state.templates || {};
+}
+
+// ══════════════════════════════════════
+//  DOM references
+// ══════════════════════════════════════
+const $mapSelect = document.getElementById('map-select');
+const $viewport = document.getElementById('viewport');
+const $gridContainer = document.getElementById('grid-container');
+const $emptyState = document.getElementById('empty-state');
+const $contextMenu = document.getElementById('context-menu');
+const $editPanel = document.getElementById('edit-panel');
+const $editBackdrop = document.getElementById('edit-backdrop');
+const $editCoord = document.getElementById('edit-coord');
+const $editRoomId = document.getElementById('edit-room-id');
+const $editTitle = document.getElementById('edit-title');
+const $editTemplate = document.getElementById('edit-template');
+const $editNotes = document.getElementById('edit-notes');
+const $editComplete = document.getElementById('edit-complete');
+const $modalOverlay = document.getElementById('room-modal-overlay');
+const $zoomControls = document.getElementById('zoom-controls');
+const $zoomDisplay = document.getElementById('zoom-display');
+
+// ══════════════════════════════════════
+//  Toolbar
+// ══════════════════════════════════════
+function refreshMapSelect() {
+  $mapSelect.innerHTML = '';
+  const ids = Object.keys(state.maps);
+  if (ids.length === 0) {
+    $emptyState.style.display = 'block';
+    $gridContainer.style.display = 'none';
+    return;
+  }
+  $emptyState.style.display = 'none';
+  $gridContainer.style.display = 'block';
+
+  ids.forEach(id => {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = state.maps[id].name;
+    if (id === state.activeMapId) opt.selected = true;
+    $mapSelect.appendChild(opt);
+  });
+}
+
+$mapSelect.addEventListener('change', () => {
+  state.activeMapId = $mapSelect.value;
+  saveState();
+  renderGrid();
+});
+
+document.getElementById('btn-new-map').addEventListener('click', promptNewMap);
+document.getElementById('btn-empty-new-map').addEventListener('click', promptNewMap);
+document.getElementById('btn-edit-map').addEventListener('click', () => {
+  if (!state.activeMapId) return;
+  const map = getActiveMap();
+  const name = prompt('Rename map:', map.name);
+  if (!name || !name.trim()) return;
+  map.name = name.trim();
+  saveState();
+  refreshMapSelect();
+});
+document.getElementById('btn-delete-map').addEventListener('click', () => {
+  if (!state.activeMapId) return;
+  const map = getActiveMap();
+  if (confirm(`Delete map "${map.name}"?`)) {
+    deleteMap(state.activeMapId);
+    refreshMapSelect();
+    renderGrid();
+  }
+});
+
+function promptNewMap() {
+  const name = prompt('Enter map name:');
+  if (!name || !name.trim()) return;
+  createMap(name.trim());
+  refreshMapSelect();
+  renderGrid();
+}
+
+// Mode toggle
+document.getElementById('btn-mode-edit').addEventListener('click', () => {
+  mode = 'edit';
+  document.getElementById('btn-mode-edit').classList.add('active');
+  document.getElementById('btn-mode-display').classList.remove('active');
+  $zoomControls.style.display = 'none';
+  zoom = 1;
+  $gridContainer.style.transform = '';
+  renderGrid();
+});
+
+document.getElementById('btn-mode-display').addEventListener('click', () => {
+  mode = 'display';
+  document.getElementById('btn-mode-display').classList.add('active');
+  document.getElementById('btn-mode-edit').classList.remove('active');
+  $zoomControls.style.display = 'flex';
+  updateZoomDisplay();
+  renderGrid();
+});
+
+// Zoom
+document.getElementById('btn-zoom-in').addEventListener('click', () => {
+  zoom = Math.min(ZOOM_MAX, zoom + ZOOM_STEP);
+  applyZoom();
+});
+document.getElementById('btn-zoom-out').addEventListener('click', () => {
+  zoom = Math.max(ZOOM_MIN, zoom - ZOOM_STEP);
+  applyZoom();
+});
+
+$viewport.addEventListener('wheel', (e) => {
+  if (mode !== 'display') return;
+  // Zoom with Ctrl/Cmd+wheel, or plain wheel in display mode
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+    zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom + delta));
+    applyZoom();
+  }
+}, { passive: false });
+
+function applyZoom() {
+  $gridContainer.style.transform = `scale(${zoom})`;
+  updateZoomDisplay();
+}
+
+function updateZoomDisplay() {
+  $zoomDisplay.textContent = Math.round(zoom * 100) + '%';
+}
+
+// ══════════════════════════════════════
+//  Grid Rendering
+// ══════════════════════════════════════
+function renderGrid() {
+  // Save scroll position before re-render
+  const prevScrollLeft = $viewport.scrollLeft;
+  const prevScrollTop = $viewport.scrollTop;
+
+  $gridContainer.innerHTML = '';
+  const map = getActiveMap();
+  if (!map) {
+    $emptyState.style.display = 'block';
+    $gridContainer.style.display = 'none';
+    return;
+  }
+  $emptyState.style.display = 'none';
+  $gridContainer.style.display = 'block';
+
+  const rooms = map.rooms;
+  const keys = Object.keys(rooms);
+  if (keys.length === 0) return;
+
+  // Calculate bounds
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  keys.forEach(k => {
+    const { x, y } = rooms[k];
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  });
+
+  const gap = mode === 'display' ? GAP_DISPLAY : GAP_EDIT;
+  const stepX = CELL_W + gap;
+  const stepY = CELL_H + gap;
+
+  // Container size with padding
+  const cols = maxX - minX + 1;
+  const rows = maxY - minY + 1;
+  const containerW = cols * stepX - gap + PADDING * 2;
+  const containerH = rows * stepY - gap + PADDING * 2;
+  $gridContainer.style.width = containerW + 'px';
+  $gridContainer.style.height = containerH + 'px';
+
+  // Collect existing coords for adjacency checks
+  const occupied = new Set(keys);
+
+  // Render each room
+  keys.forEach(key => {
+    const room = rooms[key];
+    const px = (room.x - minX) * stepX + PADDING;
+    // Invert Y: positive y goes up visually
+    const py = (maxY - room.y) * stepY + PADDING;
+
+    const cell = document.createElement('div');
+    cell.className = 'room-cell';
+    cell.style.left = px + 'px';
+    cell.style.top = py + 'px';
+    cell.dataset.x = room.x;
+    cell.dataset.y = room.y;
+
+    if (room.imageDataUrl) cell.classList.add('has-image');
+    if (room.isTemplate) cell.classList.add('is-template');
+
+    // Inner wrapper (carries overflow:hidden for image clipping)
+    const inner = document.createElement('div');
+    inner.className = 'room-cell-inner';
+
+    // Coordinate label (shows Room ID if set)
+    const coordLbl = document.createElement('div');
+    coordLbl.className = 'coord-label';
+    const coordText = coordDisplay(room.x, room.y);
+    coordLbl.textContent = room.roomId != null ? `R${room.roomId} (${coordText})` : coordText;
+    inner.appendChild(coordLbl);
+
+    // Image
+    if (room.imageDataUrl) {
+      const img = document.createElement('img');
+      img.src = room.imageDataUrl;
+      img.draggable = false;
+      inner.appendChild(img);
+    }
+
+    // Complete badge (edit mode only) — appended after image so it layers on top
+    if (mode === 'edit' && room.complete) {
+      const badge = document.createElement('div');
+      badge.className = 'complete-badge';
+      badge.innerHTML = '<svg viewBox="0 0 12 12"><polyline points="2.5 6 5.5 9 9.5 3"/></svg>';
+      inner.appendChild(badge);
+    }
+
+    // Display mode: title overlay
+    if (mode === 'display' && room.title) {
+      const titleEl = document.createElement('div');
+      titleEl.className = 'title-overlay';
+      titleEl.textContent = room.title;
+      inner.appendChild(titleEl);
+    }
+
+    cell.appendChild(inner);
+
+    // Edit mode: + buttons & drag-and-drop
+    if (mode === 'edit') {
+      // + buttons for unoccupied neighbors
+      const neighbors = [
+        { dir: 'top', dx: 0, dy: 1 },
+        { dir: 'bottom', dx: 0, dy: -1 },
+        { dir: 'left', dx: -1, dy: 0 },
+        { dir: 'right', dx: 1, dy: 0 }
+      ];
+      neighbors.forEach(({ dir, dx, dy }) => {
+        const nx = room.x + dx;
+        const ny = room.y + dy;
+        if (!occupied.has(coordKey(nx, ny))) {
+          const btn = document.createElement('div');
+          btn.className = `plus-btn ${dir}`;
+          btn.textContent = '+';
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            addRoom(nx, ny);
+            renderGrid();
+          });
+          cell.appendChild(btn);
+        }
+      });
+
+      // Drag-and-drop on cells without images
+      if (!room.imageDataUrl) {
+        cell.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          cell.classList.add('drag-over');
+        });
+        cell.addEventListener('dragleave', () => {
+          cell.classList.remove('drag-over');
+        });
+        cell.addEventListener('drop', (e) => {
+          e.preventDefault();
+          cell.classList.remove('drag-over');
+          const file = e.dataTransfer.files[0];
+          if (!file || !file.type.startsWith('image/')) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            updateRoom(room.x, room.y, {
+              imageDataUrl: reader.result,
+              imageFilename: file.name
+            });
+            renderGrid();
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      // Click to edit room details
+      cell.addEventListener('click', (e) => {
+        if (e.target.classList.contains('plus-btn')) return;
+        openEditPanel(room.x, room.y);
+      });
+
+      // Right-click for template marking (only rooms with images)
+      if (room.imageDataUrl) {
+        cell.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          showContextMenu(e.clientX, e.clientY, room.x, room.y);
+        });
+      }
+    }
+
+    // Display mode: click to show modal
+    if (mode === 'display' && room.imageDataUrl) {
+      cell.addEventListener('click', () => {
+        openRoomModal(room);
+      });
+      cell.style.cursor = 'pointer';
+    }
+
+    $gridContainer.appendChild(cell);
+  });
+
+  // Preserve/set scroll position
+  const isFirstRender = prevOffsetMinX === 0 && prevOffsetMaxY === 0 && prevScrollLeft === 0 && prevScrollTop === 0;
+  if (isFirstRender || keys.length === 1) {
+    // Center on the first/only room
+    const room = rooms[keys[0]];
+    const px = (room.x - minX) * stepX + PADDING;
+    const py = (maxY - room.y) * stepY + PADDING;
+    $viewport.scrollLeft = px - $viewport.clientWidth / 2 + CELL_W / 2;
+    $viewport.scrollTop = py - $viewport.clientHeight / 2 + CELL_H / 2;
+  } else {
+    // Compensate for grid offset changes to keep viewport stable
+    const offsetShiftX = (prevOffsetMinX - minX) * stepX;
+    const offsetShiftY = (maxY - prevOffsetMaxY) * stepY;
+    $viewport.scrollLeft = prevScrollLeft + offsetShiftX;
+    $viewport.scrollTop = prevScrollTop + offsetShiftY;
+  }
+  prevOffsetMinX = minX;
+  prevOffsetMaxY = maxY;
+}
+
+// ══════════════════════════════════════
+//  Context Menu
+// ══════════════════════════════════════
+let contextTarget = null;
+
+function showContextMenu(cx, cy, x, y) {
+  contextTarget = { x, y };
+  $contextMenu.style.left = cx + 'px';
+  $contextMenu.style.top = cy + 'px';
+  $contextMenu.style.display = 'block';
+}
+
+function hideContextMenu() {
+  $contextMenu.style.display = 'none';
+  contextTarget = null;
+}
+
+document.addEventListener('click', hideContextMenu);
+
+document.getElementById('ctx-mark-template').addEventListener('click', () => {
+  if (!contextTarget) return;
+  const map = getActiveMap();
+  if (!map) return;
+  const key = coordKey(contextTarget.x, contextTarget.y);
+  const room = map.rooms[key];
+  if (!room || !room.imageDataUrl) return;
+
+  const name = prompt('Template name:');
+  if (!name || !name.trim()) return;
+
+  room.isTemplate = true;
+  const templateId = addTemplate(name.trim(), room.imageDataUrl, key, state.activeMapId);
+  room.templateId = templateId;
+  saveState();
+  hideContextMenu();
+  renderGrid();
+});
+
+// ══════════════════════════════════════
+//  Edit Panel
+// ══════════════════════════════════════
+function openEditPanel(x, y) {
+  editingCoord = coordKey(x, y);
+  const map = getActiveMap();
+  if (!map) return;
+  const room = map.rooms[editingCoord];
+  if (!room) return;
+
+  $editCoord.textContent = coordDisplay(x, y);
+
+  // Populate Room ID dropdown, excluding IDs already used in this map
+  const map2 = getActiveMap();
+  const usedRoomIds = new Set();
+  if (map2) {
+    Object.values(map2.rooms).forEach(r => {
+      if (r.roomId !== null && coordKey(r.x, r.y) !== editingCoord) {
+        usedRoomIds.add(r.roomId);
+      }
+    });
+  }
+  $editRoomId.innerHTML = '<option value="">(None)</option>';
+  ROOM_IDS.forEach(rid => {
+    if (!usedRoomIds.has(rid)) {
+      const opt = document.createElement('option');
+      opt.value = rid;
+      opt.textContent = 'Room ' + rid;
+      if (room.roomId === rid) opt.selected = true;
+      $editRoomId.appendChild(opt);
+    }
+  });
+
+  $editTitle.value = room.title || '';
+  $editNotes.value = room.notes || '';
+  $editComplete.checked = !!room.complete;
+
+  // Populate template dropdown
+  $editTemplate.innerHTML = '<option value="">(None)</option>';
+  const templates = getTemplates();
+  Object.entries(templates).forEach(([id, t]) => {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = t.name;
+    if (room.templateId === id) opt.selected = true;
+    $editTemplate.appendChild(opt);
+  });
+
+  $editPanel.style.display = 'block';
+  $editBackdrop.style.display = 'block';
+  $editTitle.focus();
+}
+
+function closeEditPanel() {
+  $editPanel.style.display = 'none';
+  $editBackdrop.style.display = 'none';
+  editingCoord = null;
+}
+
+$editBackdrop.addEventListener('click', closeEditPanel);
+document.getElementById('btn-edit-cancel').addEventListener('click', closeEditPanel);
+
+document.getElementById('btn-edit-save').addEventListener('click', () => {
+  if (!editingCoord) return;
+  const { x, y } = parseCoord(editingCoord);
+  const map = getActiveMap();
+  const room = map.rooms[editingCoord];
+  const updates = {
+    roomId: $editRoomId.value ? parseInt($editRoomId.value, 10) : null,
+    title: $editTitle.value.trim(),
+    notes: $editNotes.value,
+    templateId: $editTemplate.value || null,
+    complete: $editComplete.checked
+  };
+
+  // If template selected and room has no image, copy template image
+  if (updates.templateId) {
+    const template = state.templates[updates.templateId];
+    if (template && !room.imageDataUrl) {
+      updates.imageDataUrl = template.imageDataUrl;
+      updates.imageFilename = '(from template: ' + template.name + ')';
+    }
+  }
+
+  updateRoom(x, y, updates);
+  closeEditPanel();
+  renderGrid();
+});
+
+document.getElementById('btn-delete-room').addEventListener('click', () => {
+  if (!editingCoord) return;
+  const { x, y } = parseCoord(editingCoord);
+  if (confirm(`Delete room at ${coordDisplay(x, y)}?`)) {
+    removeRoom(x, y);
+    closeEditPanel();
+    renderGrid();
+  }
+});
+
+// ══════════════════════════════════════
+//  Display Mode Modal
+// ══════════════════════════════════════
+function openRoomModal(room) {
+  document.getElementById('modal-img').src = room.imageDataUrl;
+  document.getElementById('modal-title').textContent = room.title || '(Untitled)';
+  const $modalRoomId = document.getElementById('modal-room-id');
+  if (room.roomId != null) {
+    $modalRoomId.textContent = 'Room: ' + room.roomId;
+    $modalRoomId.style.display = '';
+  } else {
+    $modalRoomId.style.display = 'none';
+  }
+  document.getElementById('modal-coord').textContent = 'Coord: ' + coordDisplay(room.x, room.y);
+  document.getElementById('modal-filename').textContent = 'File: ' + (room.imageFilename || '(none)');
+  const notesEl = document.getElementById('modal-notes');
+  if (room.notes) {
+    notesEl.textContent = room.notes;
+    notesEl.style.display = 'block';
+  } else {
+    notesEl.style.display = 'none';
+  }
+  $modalOverlay.classList.add('visible');
+}
+
+document.getElementById('btn-modal-close').addEventListener('click', () => {
+  $modalOverlay.classList.remove('visible');
+});
+
+$modalOverlay.addEventListener('click', (e) => {
+  if (e.target === $modalOverlay) {
+    $modalOverlay.classList.remove('visible');
+  }
+});
+
+// Close modal on Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if ($modalOverlay.classList.contains('visible')) {
+      $modalOverlay.classList.remove('visible');
+    }
+    if ($editPanel.style.display === 'block') {
+      closeEditPanel();
+    }
+    hideContextMenu();
+  }
+});
+
+// ══════════════════════════════════════
+//  Init
+// ══════════════════════════════════════
+loadState();
+refreshMapSelect();
+renderGrid();
+</script>
+</body>
+</html>
