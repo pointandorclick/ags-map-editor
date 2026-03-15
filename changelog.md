@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.1
+- fix: dynamically scan project for room IDs and assign new IDs on generate
+- fix: update GitHub Actions to v5 for Node.js 24 support
+
 ## v1.1.0
 - feat: allow change of order of rooms via drag and drop
 
