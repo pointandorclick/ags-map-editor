@@ -12,8 +12,13 @@ struct RecentProject {
 }
 
 #[tauri::command]
-fn pick_project_folder(app_handle: AppHandle) -> Result<String, String> {
-    let folder = app_handle.dialog().file().blocking_pick_folder();
+async fn pick_project_folder(app_handle: AppHandle) -> Result<String, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app_handle.dialog().file().pick_folder(move |folder| {
+        let _ = tx.send(folder);
+    });
+
+    let folder = rx.recv().map_err(|e| e.to_string())?;
 
     match folder {
         Some(file_path) => {
