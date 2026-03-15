@@ -121,3 +121,25 @@
   - Room script files use `room{id}.asc` naming (no zero-padding) — matches AGS convention
   - `fs::copy()` is the simplest way to create backup files before overwriting
   - `fs::create_dir_all()` is safe to call even if the directory already exists
+
+## US-002: Add Generate button and results modal UI shell
+- Added green 'Generate' button (`#btn-generate`) to toolbar after zoom-controls group, separated by a divider
+- Button has distinct hover (#388e3c), active (#1b5e20), and disabled (#1a3a1c) visual states
+- Button starts disabled and is enabled/disabled via `updateGenerateButtonState()` based on whether an active map exists
+- `updateGenerateButtonState()` called from `refreshMapSelect()` to keep state in sync with map changes
+- Added results modal overlay (`#generate-overlay`) following the `#room-modal-overlay` pattern (`.visible` CSS class toggle)
+- Modal (`#generate-modal`) contains: h2 title, summary textarea, scrollable results list container, and close button
+- Modal styled with dark theme (#16213e background, #0f3460 borders, #4fc3f7 heading accent)
+- Modal uses flexbox with `max-height: 80vh` and scrollable results list
+- Added CSS for change type indicators: `.change-type.new` (green), `.change-type.update` (yellow), `.change-type.skip` (grey)
+- Added CSS for per-room `.result-complete-btn` with `.completed` state (green)
+- Modal closes via close button click, overlay click, and Escape key
+- Escape key handler updated to also close generate modal (checked first before other modals)
+- No generation logic wired — just the UI shell
+- Files changed:
+  - `src/index.html` — CSS, HTML, and JavaScript additions
+- **Learnings for future iterations:**
+  - The existing display modal uses `.visible` CSS class toggle pattern (`display: none` → `display: flex`); new modals should follow same pattern
+  - Function declarations are hoisted in JavaScript, so `updateGenerateButtonState()` can be called before its declaration in the source order
+  - `const` DOM references defined later in the script are accessible from event handler callbacks since callbacks execute after the full script has loaded
+  - The toolbar uses `.group` divs with `.separator` dividers between logical groupings

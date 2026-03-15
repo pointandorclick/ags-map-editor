@@ -504,6 +504,142 @@ body {
   text-overflow: ellipsis;
 }
 
+/* ── Generate Button ── */
+#btn-generate {
+  background: #2e7d32;
+  border-color: #388e3c;
+  color: #fff;
+  font-weight: 500;
+}
+
+#btn-generate:hover { background: #388e3c; }
+#btn-generate:active { background: #1b5e20; }
+
+#btn-generate:disabled {
+  background: #1a3a1c;
+  border-color: #2a4a2c;
+  color: #667;
+  cursor: not-allowed;
+}
+
+/* ── Generate Results Modal ── */
+#generate-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 900;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+#generate-overlay.visible {
+  display: flex;
+}
+
+#generate-modal {
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 640px;
+  width: 90%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+
+#generate-modal h2 {
+  font-size: 18px;
+  margin-bottom: 12px;
+  color: #4fc3f7;
+  flex-shrink: 0;
+}
+
+#generate-summary {
+  width: 100%;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #0f3460;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  height: 60px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+#generate-results-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 100px;
+  margin-bottom: 16px;
+}
+
+/* ── Change type indicators ── */
+.change-type {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.change-type.new {
+  background: rgba(46,125,50,0.25);
+  color: #66bb6a;
+}
+
+.change-type.update {
+  background: rgba(255,179,0,0.2);
+  color: #ffb300;
+}
+
+.change-type.skip {
+  background: rgba(158,158,158,0.2);
+  color: #9e9e9e;
+}
+
+/* ── Per-room Complete button in results ── */
+.result-complete-btn {
+  background: #0f3460;
+  color: #e0e0e0;
+  border: 1px solid #1a4a8a;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.result-complete-btn:hover { background: #1a4a8a; }
+
+.result-complete-btn.completed {
+  background: #2e7d32;
+  border-color: #388e3c;
+  color: #fff;
+  cursor: default;
+}
+
+#generate-modal .close-btn {
+  display: block;
+  margin: 0 auto;
+  background: #0f3460;
+  color: #e0e0e0;
+  border: 1px solid #1a4a8a;
+  padding: 6px 20px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+#generate-modal .close-btn:hover { background: #1a4a8a; }
+
 /* ── Empty state ── */
 #empty-state {
   position: absolute;
@@ -564,6 +700,10 @@ body {
     <span class="zoom-display" id="zoom-display">100%</span>
     <button id="btn-zoom-in">+</button>
   </div>
+  <div class="separator"></div>
+  <div class="group">
+    <button id="btn-generate" disabled>Generate</button>
+  </div>
 </div>
 
 <!-- Viewport -->
@@ -620,6 +760,16 @@ body {
     </div>
     <div class="notes" id="modal-notes"></div>
     <button class="close-btn" id="btn-modal-close">Close</button>
+  </div>
+</div>
+
+<!-- Generate Results Modal -->
+<div id="generate-overlay">
+  <div id="generate-modal">
+    <h2>Generation Results</h2>
+    <textarea id="generate-summary" placeholder="Summary will appear here..." readonly></textarea>
+    <div id="generate-results-list"></div>
+    <button class="close-btn" id="btn-generate-close">Close</button>
   </div>
 </div>
 
@@ -809,6 +959,7 @@ function refreshMapSelect() {
   if (ids.length === 0) {
     $emptyState.style.display = 'block';
     $gridContainer.style.display = 'none';
+    updateGenerateButtonState();
     return;
   }
   $emptyState.style.display = 'none';
@@ -821,6 +972,7 @@ function refreshMapSelect() {
     if (id === state.activeMapId) opt.selected = true;
     $mapSelect.appendChild(opt);
   });
+  updateGenerateButtonState();
 }
 
 $mapSelect.addEventListener('change', () => {
@@ -1279,9 +1431,12 @@ $modalOverlay.addEventListener('click', (e) => {
   }
 });
 
-// Close modal on Escape
+// Close modals on Escape
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+    if ($generateOverlay.classList.contains('visible')) {
+      closeGenerateModal();
+    }
     if ($modalOverlay.classList.contains('visible')) {
       $modalOverlay.classList.remove('visible');
     }
@@ -1289,6 +1444,32 @@ document.addEventListener('keydown', (e) => {
       closeEditPanel();
     }
     hideContextMenu();
+  }
+});
+
+// ══════════════════════════════════════
+//  Generate Button & Results Modal
+// ══════════════════════════════════════
+const $generateOverlay = document.getElementById('generate-overlay');
+const $btnGenerate = document.getElementById('btn-generate');
+
+function updateGenerateButtonState() {
+  $btnGenerate.disabled = !getActiveMap();
+}
+
+function openGenerateModal() {
+  $generateOverlay.classList.add('visible');
+}
+
+function closeGenerateModal() {
+  $generateOverlay.classList.remove('visible');
+}
+
+document.getElementById('btn-generate-close').addEventListener('click', closeGenerateModal);
+
+$generateOverlay.addEventListener('click', (e) => {
+  if (e.target === $generateOverlay) {
+    closeGenerateModal();
   }
 });
 
