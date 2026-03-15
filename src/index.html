@@ -791,7 +791,8 @@ const ZOOM_STEP = 0.1;
 let state = {
   maps: {},
   activeMapId: null,
-  templates: {}
+  templates: {},
+  settings: { descriptionFormat: '{MAP} - {TITLE} {COORDS}' }
 };
 
 let mode = 'edit'; // 'edit' or 'display'
@@ -809,12 +810,13 @@ async function loadState() {
     if (raw) {
       state = JSON.parse(raw);
       if (!state.templates) state.templates = {};
+      if (!state.settings) state.settings = { descriptionFormat: '{MAP} - {TITLE} {COORDS}' };
     } else {
-      state = { maps: {}, activeMapId: null, templates: {} };
+      state = { maps: {}, activeMapId: null, templates: {}, settings: { descriptionFormat: '{MAP} - {TITLE} {COORDS}' } };
     }
   } catch (e) {
     console.error('Failed to load state:', e);
-    state = { maps: {}, activeMapId: null, templates: {} };
+    state = { maps: {}, activeMapId: null, templates: {}, settings: { descriptionFormat: '{MAP} - {TITLE} {COORDS}' } };
   }
 }
 
