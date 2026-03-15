@@ -1743,8 +1743,9 @@ function parseLeaveFunction(content, dir) {
     .map(line => line.trim())
     .filter(line => line.length > 0 && !line.startsWith('//'));
 
-  const isSimple = statements.length === 1 &&
-    /^player\.ChangeRoomAutoPosition\(\d+\);$/.test(statements[0]);
+  const isSimple = statements.length === 0 ||
+    (statements.length === 1 &&
+    /^player\.ChangeRoomAutoPosition\(\d+\);$/.test(statements[0]));
 
   return { start: funcStart, end: funcEnd, isSimple, fullText: content.substring(funcStart, funcEnd) };
 }
