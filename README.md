@@ -10,6 +10,8 @@ A desktop application for visually designing room maps for [Adventure Game Studi
 
 AGS Map Editor lets you lay out your game's rooms on a spatial grid, assign AGS room numbers, attach concept art, and add notes — all saved directly into your AGS project folder. It gives you a bird's-eye view of how your game world fits together.
 
+When you are ready click `Generate` and AGS Map Editor will create and update your AGS room files including the `room_Leave` functions with `player.ChangeRoomAutoPosition();` function pointing to the adjacent room.
+
 ## Download
 
 Download the latest installer for your platform from [GitHub Releases](https://github.com/pointandorclick/ags-map-editor/releases):
@@ -31,8 +33,11 @@ Download the latest installer for your platform from [GitHub Releases](https://g
 ## Getting Started
 
 1. Launch the app and click **Open AGS Project...** (or select a recent project).
-2. Point it at a directory that contains a `Game.agf` file.
-3. Start building your map by clicking the **+** buttons to add rooms to the grid.
+2. Point it at a AGS game directory (it must contain a `Game.agf` file).
+3. Create your first map
+4. Start building your map by clicking the **+** buttons to add rooms to the grid.
+5. Drag image files onto the rectangles to assign backgrounds.
+6. Click on a room to add more details.
 
 ## Core Concepts
 
@@ -50,7 +55,7 @@ Click a room to open its edit panel where you can set:
 - **Title** — a short label displayed on the cell
 - **Notes** — free-text notes for design documentation
 - **Image** — drag-and-drop concept art or a screenshot onto a room cell
-- **Complete** — a checkbox flag meaning "skip AGS code generation"
+- **Complete** — a checkbox flag meaning "skip AGS code generation" for this room
 
 ### Templates
 
