@@ -1783,6 +1783,47 @@ async function updateGameAgf() {
   return changes;
 }
 
+// ── Background Image Export ──
+function sanitizeFilename(title) {
+  let sanitized = title.replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
+  if (sanitized.length > 50) sanitized = sanitized.substring(0, 50);
+  return sanitized;
+}
+
+async function exportBackgroundImages() {
+  const changes = [];
+
+  for (const mapId of Object.keys(state.maps)) {
+    const map = state.maps[mapId];
+    for (const key of Object.keys(map.rooms)) {
+      const room = map.rooms[key];
+      if (room.complete) continue;
+      if (!room.imageDataUrl || room.roomId === null) continue;
+
+      const sanitizedTitle = sanitizeFilename(room.title || '');
+      const filename = `Room${room.roomId}${sanitizedTitle ? '_' + sanitizedTitle : ''}.png`;
+
+      // Strip data URL prefix (e.g. "data:image/png;base64,")
+      const commaIndex = room.imageDataUrl.indexOf(',');
+      if (commaIndex === -1) {
+        changes.push({ roomId: room.roomId, type: 'skip', detail: `Room ${room.roomId}: Invalid image data URL` });
+        continue;
+      }
+      const base64Data = room.imageDataUrl.substring(commaIndex + 1);
+
+      try {
+        await invoke('export_background_image', { projectPath, filename, base64Data });
+        changes.push({ roomId: room.roomId, type: 'new', detail: `Exported ${filename}` });
+      } catch (e) {
+        console.error(`Failed to export background for Room ${room.roomId}:`, e);
+        changes.push({ roomId: room.roomId, type: 'skip', detail: `Error exporting ${filename}: ${e}` });
+      }
+    }
+  }
+
+  return changes;
+}
+
 $btnGenerate.addEventListener('click', async () => {
   $btnGenerate.disabled = true;
 
@@ -1798,6 +1839,9 @@ $btnGenerate.addEventListener('click', async () => {
 
   // Step 3: Update Game.agf with room entries
   const agfChanges = await updateGameAgf();
+
+  // Step 4: Export background images
+  const bgChanges = await exportBackgroundImages();
 
   $btnGenerate.disabled = false;
   updateGenerateButtonState();
@@ -1819,6 +1863,10 @@ $btnGenerate.addEventListener('click', async () => {
     if (agfNewCount > 0) agfParts.push(`${agfNewCount} new`);
     if (agfUpdateCount > 0) agfParts.push(`${agfUpdateCount} updated`);
     parts.push(`Game.agf: ${agfParts.join(', ')} room entr${(agfNewCount + agfUpdateCount) > 1 ? 'ies' : 'y'}.`);
+  }
+  const bgExportCount = bgChanges.filter(c => c.type === 'new').length;
+  if (bgExportCount > 0) {
+    parts.push(`Exported ${bgExportCount} background image${bgExportCount > 1 ? 's' : ''}.`);
   }
   if (parts.length === 0) {
     parts.push('No changes needed. All rooms are either complete, have no IDs, or are already up to date.');
@@ -1848,6 +1896,16 @@ $btnGenerate.addEventListener('click', async () => {
     html += `<div style="padding:8px 8px 4px;border-bottom:1px solid #0f3460;font-size:13px;">` +
       `<strong>Game.agf</strong>` +
       agfChanges.map(c =>
+        `<div style="padding:2px 0 2px 12px;font-size:12px;color:#aaa;">` +
+        `<span class="change-type ${c.type}">${c.type}</span> ${c.detail}</div>`
+      ).join('') +
+      `</div>`;
+  }
+  // Background image export results
+  if (bgChanges.length > 0) {
+    html += `<div style="padding:8px 8px 4px;border-bottom:1px solid #0f3460;font-size:13px;">` +
+      `<strong>Backgrounds</strong>` +
+      bgChanges.map(c =>
         `<div style="padding:2px 0 2px 12px;font-size:12px;color:#aaa;">` +
         `<span class="change-type ${c.type}">${c.type}</span> ${c.detail}</div>`
       ).join('') +

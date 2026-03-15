@@ -11,6 +11,7 @@
 - Frontend calls Tauri commands via `window.__TAURI__.core.invoke()` (requires `withGlobalTauri: true` in `tauri.conf.json`)
 - `base64` crate (v0.22) uses `base64::engine::general_purpose::STANDARD.decode()` with `base64::Engine` trait import
 - AGS room scripts follow the naming pattern `room{id}.asc` (no zero-padding)
+- Game.agf `<UnloadedRoom>` entries use `<Description xml:space="preserve">` and `<Number>` child elements, indented 10 spaces (children 12 spaces)
 
 ## US-001: Copy source files into workspace
 - Copied 9 source files from the original project to the workspace at their correct relative paths
@@ -180,3 +181,39 @@
   - `content.trimEnd()` before appending ensures consistent spacing when adding multiple functions
   - The Generate button handler disables/re-enables the button to prevent concurrent generation runs
   - AGS uses standard screen coordinates (y increases downward), so Top=y-1 and Bottom=y+1 in stored coordinates, even though the map editor displays y-axis inverted
+
+## US-005: Update Game.agf with room entries
+- Added `updateGameAgf()` async function that reads Game.agf, parses existing `<UnloadedRoom>` entries, and syncs them with the map editor state
+- For each non-complete room with a roomId: builds description as `<MapName> - <RoomTitle>`
+- Three change modes: insert new entries before `</UnloadedRooms>`, update existing entries with changed descriptions in place, skip entries that already match
+- Detects indentation from existing entries to match formatting (defaults to 10-space indent, 12-space child indent)
+- Uses regex to parse `<UnloadedRoom>` blocks keyed by `<Number>` element
+- Updated Generate button click handler to add Step 3: `updateGameAgf()` after room scripts
+- Results modal summary shows Game.agf new/updated counts; detail section shows per-room changes with change-type indicators
+- `.bak` backup created automatically by `write_game_agf` Rust backend command (already implemented in US-001)
+- `cargo check` passes with no errors or warnings
+- Files changed:
+  - `src/index.html` — added `updateGameAgf()` function and updated Generate button handler
+- **Learnings for future iterations:**
+  - The `<UnloadedRoom>` XML structure uses `<Description xml:space="preserve">` and `<Number>` as direct children — no other fields needed for AGS room registration
+  - Using `String.replace(oldBlock, newBlock)` for in-place updates works because each `<UnloadedRoom>` block is unique by its `<Number>` content
+  - `lastIndexOf('</UnloadedRooms>')` is safer than `indexOf` in case there are comments or other references earlier in the file
+  - The regex `/\<UnloadedRoom\>.*?\<\/UnloadedRoom\>/gs` with dotAll flag would work but whitespace-aware `\s*` is more robust for varied formatting
+  - Indentation detection from existing entries ensures new entries blend seamlessly with the project's formatting
+
+## US-006: Export background images to Backgrounds directory
+- Added `sanitizeFilename()` helper: removes special characters, replaces spaces with underscores, caps at 50 characters
+- Added `exportBackgroundImages()` async function that iterates all maps/rooms and exports PNG files to `Backgrounds/` directory
+- For each non-complete room with both `imageDataUrl` and `roomId`: strips data URL prefix, builds `Room<ID>_<SanitizedTitle>.png` filename, calls `export_background_image` Tauri command
+- Rooms without images, without room IDs, or marked complete are skipped
+- Wired as Step 4 in the Generate button click handler (after Game.agf update)
+- Results modal summary shows exported image count; detail section shows per-file results under "Backgrounds" heading
+- No Rust backend changes needed — `export_background_image` command was already implemented in US-001
+- `cargo check` passes with no errors or warnings
+- Files changed:
+  - `src/index.html` — added `sanitizeFilename()`, `exportBackgroundImages()` functions and updated Generate button handler
+- **Learnings for future iterations:**
+  - Data URLs use format `data:<mime>;base64,<data>` — `indexOf(',')` reliably finds the prefix/data boundary
+  - The `export_background_image` Rust command handles `Backgrounds/` directory creation via `fs::create_dir_all()`
+  - Sanitization regex `[^a-zA-Z0-9 _-]` preserves alphanumerics, spaces (later converted to underscores), underscores, and hyphens
+  - Title-less rooms get filenames like `Room3.png` (no trailing underscore) thanks to the conditional `sanitizedTitle ? '_' + sanitizedTitle : ''` pattern
