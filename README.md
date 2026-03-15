@@ -2,6 +2,16 @@
 
 A desktop application for visually designing room maps for [Adventure Game Studio](https://www.adventuregamestudio.co.uk/) (AGS) projects. Built with Tauri v2 and Rust.
 
+## Download
+
+Download the latest installer for your platform from [GitHub Releases](https://github.com/pointandorclick/ags-map-editor/releases):
+
+| Platform | File |
+|----------|------|
+| Windows | `.exe` (NSIS installer) |
+| macOS | `.dmg` |
+| Linux | `.AppImage` or `.deb` |
+
 ## Overview
 
 AGS Map Editor lets you lay out your game's rooms on a spatial grid, assign AGS room numbers, attach concept art, and add notes — all saved directly into your AGS project folder. It gives you a bird's-eye view of how your game world fits together.
@@ -84,6 +94,16 @@ npm run build
 ```
 
 Produces platform-specific bundles (`.app` on macOS, `.msi` on Windows, `.deb` on Linux).
+
+### Releasing
+
+Releases are built automatically by GitHub Actions when a version tag is pushed. Use the release script:
+
+```bash
+./release.sh 0.2.0
+```
+
+This bumps the version in `tauri.conf.json`, `Cargo.toml`, and `package.json`, commits, tags, and pushes. The workflow builds for all platforms and creates a **draft release** on GitHub. Go to [Releases](https://github.com/pointandorclick/ags-map-editor/releases), review the draft, and publish it.
 
 ## License
 
