@@ -1557,6 +1557,9 @@ $modalOverlay.addEventListener('click', (e) => {
 // Close modals on Escape
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+    if ($settingsOverlay.classList.contains('visible')) {
+      closeSettings();
+    }
     if ($generateOverlay.classList.contains('visible')) {
       closeGenerateModal();
     }
@@ -1593,6 +1596,57 @@ document.getElementById('btn-generate-close').addEventListener('click', closeGen
 $generateOverlay.addEventListener('click', (e) => {
   if (e.target === $generateOverlay) {
     closeGenerateModal();
+  }
+});
+
+// ══════════════════════════════════════
+//  Settings Modal
+// ══════════════════════════════════════
+const $settingsOverlay = document.getElementById('settings-overlay');
+const $settingsDescFormat = document.getElementById('settings-desc-format');
+const $settingsDescPreview = document.getElementById('settings-desc-preview');
+
+function updateDescPreview() {
+  const fmt = $settingsDescFormat.value || '{MAP} - {TITLE} {COORDS}';
+  const preview = fmt
+    .replace(/\{MAP\}/g, 'MyMap')
+    .replace(/\{TITLE\}/g, 'Entrance')
+    .replace(/\{COORDS\}/g, coordDisplay(2, 3))
+    .replace(/\{X\}/g, 2)
+    .replace(/\{Y\}/g, 3);
+  $settingsDescPreview.textContent = preview;
+}
+
+function openSettings() {
+  $settingsDescFormat.value = (state.settings && state.settings.descriptionFormat) || '{MAP} - {TITLE} {COORDS}';
+  $settingsOverlay.classList.add('visible');
+  updateDescPreview();
+}
+
+function closeSettings() {
+  $settingsOverlay.classList.remove('visible');
+}
+
+function saveSettings() {
+  state.settings.descriptionFormat = $settingsDescFormat.value || '{MAP} - {TITLE} {COORDS}';
+  saveState();
+  closeSettings();
+}
+
+function resetDescFormat() {
+  $settingsDescFormat.value = '{MAP} - {TITLE} {COORDS}';
+  updateDescPreview();
+}
+
+document.getElementById('btn-settings').addEventListener('click', openSettings);
+document.getElementById('btn-settings-save').addEventListener('click', saveSettings);
+document.getElementById('btn-settings-cancel').addEventListener('click', closeSettings);
+document.getElementById('btn-settings-reset').addEventListener('click', resetDescFormat);
+$settingsDescFormat.addEventListener('input', updateDescPreview);
+
+$settingsOverlay.addEventListener('click', (e) => {
+  if (e.target === $settingsOverlay) {
+    closeSettings();
   }
 });
 
