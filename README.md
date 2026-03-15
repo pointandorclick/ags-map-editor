@@ -1,4 +1,4 @@
-# <img src="src-tauri/icons/icon.png" alt="icon" width="32" height="32"> AGS Map Editor
+# <img src="src-tauri/icons/icon.png" alt="AGS Map Editor Logo" width="128" height="128"> AGS Map Editor
 
 A desktop application for visually designing room maps for [Adventure Game Studio](https://www.adventuregamestudio.co.uk/) (AGS) projects. Built with Tauri v2 and Rust.
 
