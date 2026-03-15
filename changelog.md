@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.1.0
+- feat: allow change of order of rooms via drag and drop
+
 ## v1.0.2
 - fix: an empty room_Leave function was not updating
 - feat: global settings added to format AGS room descriptions
