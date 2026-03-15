@@ -1846,72 +1846,118 @@ $btnGenerate.addEventListener('click', async () => {
   $btnGenerate.disabled = false;
   updateGenerateButtonState();
 
-  // Show combined results in the generate modal
+  // ── Build per-room results ──
+  const roomResults = new Map();
+
+  // Seed with all non-complete rooms that have roomIds
+  for (const mapId of Object.keys(state.maps)) {
+    const map = state.maps[mapId];
+    for (const key of Object.keys(map.rooms)) {
+      const room = map.rooms[key];
+      if (room.complete || room.roomId === null) continue;
+      if (!roomResults.has(room.roomId)) {
+        roomResults.set(room.roomId, {
+          roomId: room.roomId,
+          title: room.title || '(Untitled)',
+          mapId,
+          coordKey: key,
+          mapName: map.name,
+          coord: coordDisplay(room.x, room.y),
+          changes: []
+        });
+      }
+    }
+  }
+
+  // Merge ID assignment results
+  for (const a of assignments) {
+    const entry = roomResults.get(a.roomId);
+    if (entry) entry.changes.push({ type: 'new', detail: 'Assigned Room ID ' + a.roomId });
+  }
+
+  // Merge script generation results
+  for (const sc of scriptChanges) {
+    const entry = roomResults.get(sc.roomId);
+    if (entry) {
+      for (const action of sc.actions) {
+        entry.changes.push(action);
+      }
+    }
+  }
+
+  // Merge Game.agf results
+  for (const gc of agfChanges) {
+    if (gc.roomId === 0) continue; // skip file-level errors
+    const entry = roomResults.get(gc.roomId);
+    if (entry) entry.changes.push({ type: gc.type, detail: 'Game.agf: ' + gc.detail });
+  }
+
+  // Merge background export results
+  for (const bc of bgChanges) {
+    const entry = roomResults.get(bc.roomId);
+    if (entry) entry.changes.push(bc);
+  }
+
+  // ── Compute summary counts ──
+  let newCount = 0, updateCount = 0, skipCount = 0;
+  for (const [, entry] of roomResults) {
+    const types = entry.changes.map(c => c.type);
+    if (types.includes('new')) newCount++;
+    else if (types.includes('update')) updateCount++;
+    else skipCount++;
+  }
+
+  // ── Populate results modal ──
   const $summary = document.getElementById('generate-summary');
   const $resultsList = document.getElementById('generate-results-list');
-  const parts = [];
-  if (assignments.length > 0) {
-    parts.push(`Assigned ${assignments.length} room ID${assignments.length > 1 ? 's' : ''}.`);
-  }
-  if (scriptChanges.length > 0) {
-    parts.push(`Updated ${scriptChanges.length} room script${scriptChanges.length > 1 ? 's' : ''}.`);
-  }
-  const agfNewCount = agfChanges.filter(c => c.type === 'new').length;
-  const agfUpdateCount = agfChanges.filter(c => c.type === 'update').length;
-  if (agfNewCount > 0 || agfUpdateCount > 0) {
-    const agfParts = [];
-    if (agfNewCount > 0) agfParts.push(`${agfNewCount} new`);
-    if (agfUpdateCount > 0) agfParts.push(`${agfUpdateCount} updated`);
-    parts.push(`Game.agf: ${agfParts.join(', ')} room entr${(agfNewCount + agfUpdateCount) > 1 ? 'ies' : 'y'}.`);
-  }
-  const bgExportCount = bgChanges.filter(c => c.type === 'new').length;
-  if (bgExportCount > 0) {
-    parts.push(`Exported ${bgExportCount} background image${bgExportCount > 1 ? 's' : ''}.`);
-  }
-  if (parts.length === 0) {
-    parts.push('No changes needed. All rooms are either complete, have no IDs, or are already up to date.');
-  }
-  $summary.value = parts.join(' ');
+  const totalRooms = roomResults.size;
 
-  let html = '';
-  // ID assignment results
-  html += assignments.map(a =>
-    `<div style="padding:6px 8px;border-bottom:1px solid #0f3460;font-size:13px;">` +
-    `<span class="change-type new">assigned</span> ` +
-    `Room ${a.roomId} → ${a.mapName} (${a.coord})` +
-    `</div>`
-  ).join('');
-  // Script generation results
-  scriptChanges.forEach(rc => {
-    html += `<div style="padding:8px 8px 4px;border-bottom:1px solid #0f3460;font-size:13px;">` +
-      `<strong>Room ${rc.roomId}</strong> — ${rc.mapName} (${rc.coord})` +
-      rc.actions.map(a =>
-        `<div style="padding:2px 0 2px 12px;font-size:12px;color:#aaa;">` +
-        `<span class="change-type ${a.type}">${a.type}</span> ${a.detail}</div>`
-      ).join('') +
-      `</div>`;
-  });
-  // Game.agf results
-  if (agfChanges.length > 0) {
-    html += `<div style="padding:8px 8px 4px;border-bottom:1px solid #0f3460;font-size:13px;">` +
-      `<strong>Game.agf</strong>` +
-      agfChanges.map(c =>
-        `<div style="padding:2px 0 2px 12px;font-size:12px;color:#aaa;">` +
-        `<span class="change-type ${c.type}">${c.type}</span> ${c.detail}</div>`
-      ).join('') +
-      `</div>`;
+  if (totalRooms === 0) {
+    $summary.value = 'No rooms to process. Add rooms with IDs first.';
+    $resultsList.innerHTML = '';
+  } else {
+    $summary.value = `Processed ${totalRooms} room${totalRooms !== 1 ? 's' : ''}: ${newCount} new, ${updateCount} updated, ${skipCount} skipped`;
+
+    let html = '';
+    for (const [, entry] of roomResults) {
+      const types = entry.changes.map(c => c.type);
+      const overallType = types.includes('new') ? 'new' : (types.includes('update') ? 'update' : 'skip');
+
+      html += `<div style="padding:8px;border-bottom:1px solid #0f3460;font-size:13px;">` +
+        `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">` +
+        `<span><span class="change-type ${overallType}">${overallType}</span> <strong>${entry.title}</strong> — Room ${entry.roomId}</span>` +
+        `<button class="result-complete-btn" data-map-id="${entry.mapId}" data-coord="${entry.coordKey}">Complete</button>` +
+        `</div>`;
+
+      if (entry.changes.length > 0) {
+        html += `<ul style="margin:0;padding-left:20px;list-style:disc;">` +
+          entry.changes.map(c =>
+            `<li style="font-size:12px;color:#aaa;padding:1px 0;">` +
+            `<span class="change-type ${c.type}">${c.type}</span> ${c.detail}</li>`
+          ).join('') +
+          `</ul>`;
+      }
+
+      html += `</div>`;
+    }
+    $resultsList.innerHTML = html;
+
+    // Wire Complete buttons
+    $resultsList.querySelectorAll('.result-complete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (btn.classList.contains('completed')) return;
+        const mapId = btn.dataset.mapId;
+        const coord = btn.dataset.coord;
+        const map = state.maps[mapId];
+        if (!map || !map.rooms[coord]) return;
+        map.rooms[coord].complete = true;
+        await saveState();
+        renderGrid();
+        btn.textContent = 'Completed';
+        btn.classList.add('completed');
+      });
+    });
   }
-  // Background image export results
-  if (bgChanges.length > 0) {
-    html += `<div style="padding:8px 8px 4px;border-bottom:1px solid #0f3460;font-size:13px;">` +
-      `<strong>Backgrounds</strong>` +
-      bgChanges.map(c =>
-        `<div style="padding:2px 0 2px 12px;font-size:12px;color:#aaa;">` +
-        `<span class="change-type ${c.type}">${c.type}</span> ${c.detail}</div>`
-      ).join('') +
-      `</div>`;
-  }
-  $resultsList.innerHTML = html;
 
   openGenerateModal();
 });
