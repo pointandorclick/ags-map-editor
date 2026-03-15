@@ -1676,6 +1676,113 @@ async function generateRoomScripts() {
   return changes;
 }
 
+// ── Game.agf Room Entry Management ──
+async function updateGameAgf() {
+  const changes = [];
+
+  // Collect all non-complete rooms with roomIds across all maps
+  const roomEntries = [];
+  for (const mapId of Object.keys(state.maps)) {
+    const map = state.maps[mapId];
+    for (const key of Object.keys(map.rooms)) {
+      const room = map.rooms[key];
+      if (room.complete || room.roomId === null) continue;
+      roomEntries.push({
+        roomId: room.roomId,
+        description: `${map.name} - ${room.title || ''}`,
+        mapName: map.name,
+        coord: coordDisplay(room.x, room.y)
+      });
+    }
+  }
+
+  if (roomEntries.length === 0) return changes;
+
+  // Read current Game.agf
+  let agfContent;
+  try {
+    agfContent = await invoke('read_game_agf', { projectPath });
+  } catch (e) {
+    console.error('Failed to read Game.agf:', e);
+    changes.push({ roomId: 0, type: 'skip', detail: `Error reading Game.agf: ${e}` });
+    return changes;
+  }
+
+  // Parse existing UnloadedRoom entries: map Number → { description, start, end }
+  const existingRooms = new Map();
+  const roomBlockRegex = /<UnloadedRoom>\s*<Description xml:space="preserve">(.*?)<\/Description>\s*<Number>(\d+)<\/Number>\s*<\/UnloadedRoom>/g;
+  let match;
+  while ((match = roomBlockRegex.exec(agfContent)) !== null) {
+    existingRooms.set(parseInt(match[2], 10), {
+      description: match[1],
+      fullMatch: match[0],
+      index: match.index
+    });
+  }
+
+  // Detect indentation from existing entries
+  let indent = '          '; // default: 10 spaces
+  let childIndent = '            '; // default: 12 spaces
+  if (existingRooms.size > 0) {
+    const firstEntry = existingRooms.values().next().value;
+    const lineStart = agfContent.lastIndexOf('\n', firstEntry.index);
+    if (lineStart !== -1) {
+      const leadingWhitespace = agfContent.substring(lineStart + 1, firstEntry.index);
+      if (leadingWhitespace.trim() === '') {
+        indent = leadingWhitespace;
+        childIndent = indent + '  ';
+      }
+    }
+  }
+
+  let newContent = agfContent;
+  const newEntries = [];
+
+  for (const entry of roomEntries) {
+    const existing = existingRooms.get(entry.roomId);
+
+    if (!existing) {
+      // New room — will be inserted before </UnloadedRooms>
+      newEntries.push(entry);
+      changes.push({ roomId: entry.roomId, type: 'new', detail: `Added Room ${entry.roomId}: ${entry.description}` });
+    } else if (existing.description !== entry.description) {
+      // Update description in place
+      const oldBlock = existing.fullMatch;
+      const newBlock = `<UnloadedRoom>\n${childIndent}<Description xml:space="preserve">${entry.description}</Description>\n${childIndent}<Number>${entry.roomId}</Number>\n${indent}</UnloadedRoom>`;
+      newContent = newContent.replace(oldBlock, newBlock);
+      changes.push({ roomId: entry.roomId, type: 'update', detail: `Updated description: "${existing.description}" → "${entry.description}"` });
+    } else {
+      // Already matches — skip
+      changes.push({ roomId: entry.roomId, type: 'skip', detail: `Room ${entry.roomId} already up to date` });
+    }
+  }
+
+  // Insert new entries before </UnloadedRooms>
+  if (newEntries.length > 0) {
+    const closingTag = '</UnloadedRooms>';
+    const closingIndex = newContent.lastIndexOf(closingTag);
+    if (closingIndex !== -1) {
+      let insertBlock = '';
+      for (const entry of newEntries) {
+        insertBlock += `${indent}<UnloadedRoom>\n${childIndent}<Description xml:space="preserve">${entry.description}</Description>\n${childIndent}<Number>${entry.roomId}</Number>\n${indent}</UnloadedRoom>\n`;
+      }
+      newContent = newContent.substring(0, closingIndex) + insertBlock + newContent.substring(closingIndex);
+    }
+  }
+
+  // Write if content changed
+  if (newContent !== agfContent) {
+    try {
+      await invoke('write_game_agf', { projectPath, content: newContent });
+    } catch (e) {
+      console.error('Failed to write Game.agf:', e);
+      changes.push({ roomId: 0, type: 'skip', detail: `Error writing Game.agf: ${e}` });
+    }
+  }
+
+  return changes;
+}
+
 $btnGenerate.addEventListener('click', async () => {
   $btnGenerate.disabled = true;
 
@@ -1688,6 +1795,9 @@ $btnGenerate.addEventListener('click', async () => {
 
   // Step 2: Generate/update room scripts
   const scriptChanges = await generateRoomScripts();
+
+  // Step 3: Update Game.agf with room entries
+  const agfChanges = await updateGameAgf();
 
   $btnGenerate.disabled = false;
   updateGenerateButtonState();
@@ -1702,8 +1812,16 @@ $btnGenerate.addEventListener('click', async () => {
   if (scriptChanges.length > 0) {
     parts.push(`Updated ${scriptChanges.length} room script${scriptChanges.length > 1 ? 's' : ''}.`);
   }
+  const agfNewCount = agfChanges.filter(c => c.type === 'new').length;
+  const agfUpdateCount = agfChanges.filter(c => c.type === 'update').length;
+  if (agfNewCount > 0 || agfUpdateCount > 0) {
+    const agfParts = [];
+    if (agfNewCount > 0) agfParts.push(`${agfNewCount} new`);
+    if (agfUpdateCount > 0) agfParts.push(`${agfUpdateCount} updated`);
+    parts.push(`Game.agf: ${agfParts.join(', ')} room entr${(agfNewCount + agfUpdateCount) > 1 ? 'ies' : 'y'}.`);
+  }
   if (parts.length === 0) {
-    parts.push('No changes needed. All rooms are either complete, have no IDs, or scripts are already up to date.');
+    parts.push('No changes needed. All rooms are either complete, have no IDs, or are already up to date.');
   }
   $summary.value = parts.join(' ');
 
@@ -1725,6 +1843,16 @@ $btnGenerate.addEventListener('click', async () => {
       ).join('') +
       `</div>`;
   });
+  // Game.agf results
+  if (agfChanges.length > 0) {
+    html += `<div style="padding:8px 8px 4px;border-bottom:1px solid #0f3460;font-size:13px;">` +
+      `<strong>Game.agf</strong>` +
+      agfChanges.map(c =>
+        `<div style="padding:2px 0 2px 12px;font-size:12px;color:#aaa;">` +
+        `<span class="change-type ${c.type}">${c.type}</span> ${c.detail}</div>`
+      ).join('') +
+      `</div>`;
+  }
   $resultsList.innerHTML = html;
 
   openGenerateModal();
