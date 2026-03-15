@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
 
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
@@ -127,6 +128,62 @@ fn save_project_data(project_path: String, data: String) -> Result<(), String> {
     fs::write(&agm_file, data).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn read_room_script(project_path: String, room_id: u32) -> Result<String, String> {
+    let path = Path::new(&project_path).join(format!("room{}.asc", room_id));
+    if path.exists() {
+        fs::read_to_string(&path).map_err(|e| e.to_string())
+    } else {
+        Ok(String::new())
+    }
+}
+
+#[tauri::command]
+fn write_room_script(project_path: String, room_id: u32, content: String) -> Result<(), String> {
+    let path = Path::new(&project_path).join(format!("room{}.asc", room_id));
+    fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn read_game_agf(project_path: String) -> Result<String, String> {
+    let path = Path::new(&project_path).join("Game.agf");
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn write_game_agf(project_path: String, content: String) -> Result<(), String> {
+    let agf_path = Path::new(&project_path).join("Game.agf");
+    let bak_path = Path::new(&project_path).join("Game.agf.bak");
+
+    if agf_path.exists() {
+        fs::copy(&agf_path, &bak_path).map_err(|e| e.to_string())?;
+    }
+
+    fs::write(&agf_path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn export_background_image(
+    project_path: String,
+    filename: String,
+    base64_data: String,
+) -> Result<(), String> {
+    let bg_dir = Path::new(&project_path).join("Backgrounds");
+    fs::create_dir_all(&bg_dir).map_err(|e| e.to_string())?;
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&base64_data)
+        .map_err(|e| e.to_string())?;
+
+    let file_path = bg_dir.join(&filename);
+    fs::write(&file_path, bytes).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn check_file_exists(file_path: String) -> Result<bool, String> {
+    Ok(Path::new(&file_path).exists())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -138,6 +195,12 @@ pub fn run() {
             add_recent_project,
             load_project_data,
             save_project_data,
+            read_room_script,
+            write_room_script,
+            read_game_agf,
+            write_game_agf,
+            export_background_image,
+            check_file_exists,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

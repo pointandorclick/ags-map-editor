@@ -9,6 +9,8 @@
 - `app_handle.path().app_data_dir()` provides the platform-specific app data directory
 - `FilePath::into_path()` converts dialog results to `PathBuf`
 - Frontend calls Tauri commands via `window.__TAURI__.core.invoke()` (requires `withGlobalTauri: true` in `tauri.conf.json`)
+- `base64` crate (v0.22) uses `base64::engine::general_purpose::STANDARD.decode()` with `base64::Engine` trait import
+- AGS room scripts follow the naming pattern `room{id}.asc` (no zero-padding)
 
 ## US-001: Copy source files into workspace
 - Copied 9 source files from the original project to the workspace at their correct relative paths
@@ -97,3 +99,25 @@
   - `loadState()` must be awaited at startup to ensure state is populated before rendering
   - The `projectPath` global (set in US-004's `selectProject()`) is shared by both `loadState()` and `saveState()`
   - On load failure or empty data, state is initialized to `{ maps: {}, activeMapId: null, templates: {} }` to match the default
+
+## US-001: Add Rust backend commands for file generation I/O
+- Added `base64 = "0.22"` to `src-tauri/Cargo.toml` dependencies
+- Implemented 6 new Tauri commands in `src-tauri/src/lib.rs`:
+  - `read_room_script` — reads `room{id}.asc` from project path, returns empty string if file missing
+  - `write_room_script` — writes content to `room{id}.asc` in project path
+  - `read_game_agf` — reads and returns `Game.agf` content as string
+  - `write_game_agf` — creates `.bak` backup of existing `Game.agf`, then writes new content
+  - `export_background_image` — decodes base64 data, ensures `Backgrounds/` directory exists, writes PNG file
+  - `check_file_exists` — returns bool indicating whether file exists at given path
+- All 6 commands registered in `tauri::generate_handler![]` alongside existing commands
+- `cargo check` passes with no errors or warnings
+- Files changed:
+  - `src-tauri/Cargo.toml` — added `base64 = "0.22"` dependency
+  - `src-tauri/src/lib.rs` — added `use base64::Engine;` import and 6 new command functions
+  - `src-tauri/Cargo.lock` — auto-updated with base64 crate resolution
+- **Learnings for future iterations:**
+  - `base64` v0.22 requires importing the `Engine` trait (`use base64::Engine;`) to call `.decode()` on engine instances
+  - The standard base64 engine is accessed via `base64::engine::general_purpose::STANDARD`
+  - Room script files use `room{id}.asc` naming (no zero-padding) — matches AGS convention
+  - `fs::copy()` is the simplest way to create backup files before overwriting
+  - `fs::create_dir_all()` is safe to call even if the directory already exists
