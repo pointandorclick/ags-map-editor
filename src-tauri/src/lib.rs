@@ -461,7 +461,7 @@ fn update_crm_room_events(
 }
 
 #[tauri::command]
-fn list_crm_files(project_path: String) -> Result<Vec<u32>, String> {
+fn list_crm_room_ids(project_path: String) -> Result<Vec<u32>, String> {
     let dir = Path::new(&project_path);
     let mut ids: Vec<u32> = fs::read_dir(dir)
         .map_err(|e| e.to_string())?
@@ -773,7 +773,7 @@ pub fn run() {
             check_file_exists,
             check_background_matches,
             update_crm_room_events,
-            list_crm_files,
+            list_crm_room_ids,
             copy_room_crm,
         ])
         .run(tauri::generate_context!())
