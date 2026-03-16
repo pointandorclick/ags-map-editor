@@ -36,7 +36,7 @@ Download the latest installer for your platform from [GitHub Releases](https://g
 
 1. In AGS create a new Room then under room events add the 4 room_Leave events via the UI. Leave everything else blank and not the Room ID. (This is required so AGS Map Editor knows the screen dimensions of your game and allows creation of the room_Leave functions automatically)
 2. Launch the app and click **Open AGS Project...** (or select a recent project) and point it at a AGS game directory (it must contain a `Game.agf` file).
-3. You will be prompted for a file to use as the Base room. Select the Room ID that you created in step 1. This will be used to create new rooms via the generate command. **You can now delete/re-use this room within AGS** (AGS Map Editor has duplicated it).
+3. You will be prompted for a file to use as the Base room. Select the Room ID that you created in step 1. This will be used to create new rooms via the generate command. **You can now delete/re-use this room within AGS** — AGS Map Editor has copied it to `BaseRoom/base-room.crm` in your project directory.
 4. Create your first map
 5. Start building your map by clicking the **+** buttons to add rooms to the grid.
 6. Drag image files onto the rectangles to assign backgrounds.
@@ -63,7 +63,7 @@ Once this is complete you will need to:
 
 ### Base Room
 
-When you first open a project, the editor prompts you to select a **base room** — an existing `.crm` file from your AGS project that will be used as the starting point for new rooms. During generation, any room that doesn't already have a `.crm` file will get a copy of the base room. This gives new rooms the same dimensions, hotspot layout, walkable areas, and other properties as the base.
+When you first open a project, the editor prompts you to select a **base room** — an existing `.crm` file from your AGS project that will be used as the starting point for new rooms. The selected file is copied to `BaseRoom/base-room.crm` inside your project directory, so the original room can safely be deleted or re-used in AGS after selection. During generation, any room that doesn't already have a `.crm` file will get a copy of this base room. This gives new rooms the same dimensions, hotspot layout, walkable areas, and other properties as the base.
 
 You can change the base room at any time from **Settings**. Set it to "(None)" to skip `.crm` generation entirely.
 
