@@ -1065,7 +1065,8 @@ body {
 import {
   coordKey, parseCoord, coordDisplay, makeRoom, generateId,
   buildDescription, buildAscDescription, buildLeaveFunction, parseLeaveFunction,
-  sanitizeFilename, roomOverallType, ASC_DIRECTIONS, assignRoomIdsSync
+  sanitizeFilename, roomOverallType, ASC_DIRECTIONS, assignRoomIdsSync,
+  resolveTemplateSourceRoomId
 } from './logic.js';
 
 const { invoke } = window.__TAURI__.core;
@@ -2114,6 +2115,51 @@ async function assignRoomIds() {
   return assignRoomIdsSync(state, ROOM_IDS);
 }
 
+// ── Copy Template Files ──
+
+async function copyTemplateFiles() {
+  const results = [];
+
+  for (const mapId of Object.keys(state.maps)) {
+    const map = state.maps[mapId];
+    for (const key of Object.keys(map.rooms)) {
+      const room = map.rooms[key];
+      if (room.complete || room.roomId === null) continue;
+      if (!room.templateId) continue;
+      if (room.templateId === room.lastAppliedTemplateId) continue;
+
+      const sourceRoomId = resolveTemplateSourceRoomId(state, room.templateId);
+      if (sourceRoomId === null) continue;
+
+      const force = room.lastAppliedTemplateId !== null;
+      const copyResults = await invoke('copy_all_room_files', {
+        projectPath,
+        sourceRoomId,
+        targetRoomId: room.roomId,
+        force
+      });
+
+      const roomResult = {
+        roomId: room.roomId,
+        mapName: map.name,
+        coord: coordDisplay(room.x, room.y),
+        actions: copyResults.map(r => {
+          const [status, file] = r.split(':');
+          return {
+            type: status === 'copied' ? 'new' : 'skip',
+            detail: `Template: ${r}`
+          };
+        })
+      };
+      results.push(roomResult);
+
+      room.lastAppliedTemplateId = room.templateId;
+    }
+  }
+
+  return results;
+}
+
 // ── Room Script (.asc) Generation ──
 
 async function generateRoomScripts() {
@@ -2510,16 +2556,22 @@ $btnGenerate.addEventListener('click', async () => {
     renderGrid();
   }
 
-  // Step 2: Generate/update room scripts
+  // Step 2: Copy template files for rooms with per-room templates
+  const templateChanges = await copyTemplateFiles();
+  if (templateChanges.length > 0) {
+    await saveState();
+  }
+
+  // Step 3: Generate/update room scripts
   const scriptChanges = await generateRoomScripts();
 
-  // Step 3: Update Game.agf with room entries
+  // Step 4: Update Game.agf with room entries
   const agfChanges = await updateGameAgf();
 
-  // Step 4: Export background images
+  // Step 5: Export background images
   const bgChanges = await exportBackgroundImages();
 
-  // Step 5: Copy base room .crm for new rooms
+  // Step 6: Copy base room .crm for new rooms
   const crmChanges = await copyBaseRoomFiles();
 
   $btnGenerate.disabled = false;
@@ -2552,6 +2604,16 @@ $btnGenerate.addEventListener('click', async () => {
   for (const a of assignments) {
     const entry = roomResults.get(a.roomId);
     if (entry) entry.changes.push({ type: 'new', detail: 'Assigned Room ID ' + a.roomId });
+  }
+
+  // Merge template file copy results
+  for (const tc of templateChanges) {
+    const entry = roomResults.get(tc.roomId);
+    if (entry) {
+      for (const action of tc.actions) {
+        entry.changes.push(action);
+      }
+    }
   }
 
   // Merge script generation results
