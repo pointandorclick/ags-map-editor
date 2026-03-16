@@ -2026,11 +2026,19 @@ function closeSettings() {
   $settingsOverlay.classList.remove('visible');
 }
 
-function saveSettings() {
+async function saveSettings() {
   state.settings.descriptionFormat = $settingsDescFormat.value || '{MAP} - {TITLE} {COORDS}';
-  state.settings.baseRoom = $settingsBaseRoom.value;
+  const value = $settingsBaseRoom.value;
+  state.settings.baseRoom = value;
   saveState();
   closeSettings();
+  if (value && value !== '(None)' && projectPath) {
+    try {
+      await invoke('save_base_room', { projectPath, templateFilename: value });
+    } catch (e) {
+      console.error('Failed to save base room copy:', e);
+    }
+  }
 }
 
 function resetDescFormat() {
@@ -2068,10 +2076,18 @@ function closeBaseRoomPrompt() {
   $baseroomOverlay.classList.remove('visible');
 }
 
-document.getElementById('btn-baseroom-save').addEventListener('click', () => {
-  state.settings.baseRoom = $baseroomSelect.value;
+document.getElementById('btn-baseroom-save').addEventListener('click', async () => {
+  const value = $baseroomSelect.value;
+  state.settings.baseRoom = value;
   saveState();
   closeBaseRoomPrompt();
+  if (value && value !== '(None)' && projectPath) {
+    try {
+      await invoke('save_base_room', { projectPath, templateFilename: value });
+    } catch (e) {
+      console.error('Failed to save base room copy:', e);
+    }
+  }
 });
 
 document.getElementById('btn-refresh-baseroom').addEventListener('click', () => {
