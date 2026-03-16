@@ -200,6 +200,47 @@ fn list_room_ids(project_path: String) -> Result<Vec<u32>, String> {
 }
 
 #[tauri::command]
+fn list_crm_files(project_path: String) -> Result<Vec<String>, String> {
+    let dir = Path::new(&project_path);
+    let mut files: Vec<String> = fs::read_dir(dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.ends_with(".crm") {
+                Some(name)
+            } else {
+                None
+            }
+        })
+        .collect();
+    files.sort();
+    Ok(files)
+}
+
+#[tauri::command]
+fn copy_crm_template(
+    project_path: String,
+    template_filename: String,
+    room_id: u32,
+) -> Result<String, String> {
+    let project_dir = Path::new(&project_path);
+    let source = project_dir.join(&template_filename);
+    let target = project_dir.join(format!("room{}.crm", room_id));
+
+    if target.exists() {
+        return Ok("exists".to_string());
+    }
+
+    if !source.exists() {
+        return Err(format!("Base room file not found: {}", template_filename));
+    }
+
+    fs::copy(&source, &target).map_err(|e| e.to_string())?;
+    Ok("copied".to_string())
+}
+
+#[tauri::command]
 fn check_file_exists(file_path: String) -> Result<bool, String> {
     Ok(Path::new(&file_path).exists())
 }
@@ -727,6 +768,8 @@ pub fn run() {
             write_game_agf,
             export_background_image,
             list_room_ids,
+            list_crm_files,
+            copy_crm_template,
             check_file_exists,
             check_background_matches,
             update_crm_room_events,

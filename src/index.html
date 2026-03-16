@@ -702,6 +702,18 @@ body {
   box-sizing: border-box;
 }
 
+#settings-modal select {
+  width: 100%;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #0f3460;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
 #settings-modal .token-help {
   font-size: 11px;
   color: #666;
@@ -750,6 +762,82 @@ body {
 }
 
 #settings-modal .btn-row button.save:hover { background: #388e3c; }
+
+/* ── Base Room Prompt Modal ── */
+#baseroom-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 950;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+#baseroom-overlay.visible {
+  display: flex;
+}
+
+#baseroom-modal {
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 460px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+
+#baseroom-modal h2 {
+  font-size: 18px;
+  margin-bottom: 8px;
+  color: #4fc3f7;
+}
+
+#baseroom-modal p {
+  font-size: 13px;
+  color: #ccc;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+#baseroom-modal select {
+  width: 100%;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #0f3460;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+#baseroom-modal .btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+#baseroom-modal .btn-row button {
+  background: #0f3460;
+  color: #e0e0e0;
+  border: 1px solid #1a4a8a;
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#baseroom-modal .btn-row button:hover { background: #1a4a8a; }
+
+#baseroom-modal .btn-row button.save {
+  background: #2e7d32;
+  border-color: #388e3c;
+}
+
+#baseroom-modal .btn-row button.save:hover { background: #388e3c; }
 
 /* ── Empty state ── */
 #empty-state {
@@ -937,11 +1025,16 @@ body {
       <span class="preview-label">Preview:</span>
       <span id="settings-desc-preview"></span>
     </div>
-    <label for="settings-template-room" style="margin-top:12px;">Template Room (.crm)</label>
-    <select id="settings-template-room">
-      <option value="">(None)</option>
-    </select>
-    <div class="token-help">New rooms will be created by copying this room's .crm file</div>
+    <div style="margin-top:16px;">
+      <label for="settings-base-room">Base Room</label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <select id="settings-base-room" style="flex:1;">
+          <option value="">(None &mdash; skip .crm generation)</option>
+        </select>
+        <button type="button" id="btn-refresh-base-room" title="Refresh .crm file list" style="background:#0f3460;color:#e0e0e0;border:1px solid #1a4a8a;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:14px;line-height:1;">&#x21bb;</button>
+      </div>
+      <div class="token-help">New rooms will get a copy of this .crm file during generation.</div>
+    </div>
     <div class="btn-row">
       <button id="btn-settings-reset">Reset to Default</button>
       <button id="btn-settings-cancel">Cancel</button>
@@ -950,17 +1043,20 @@ body {
   </div>
 </div>
 
-<!-- Template Room Picker Modal (shown on project open when no template is set) -->
-<div id="template-picker-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;display:none;align-items:center;justify-content:center;">
-  <div style="background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:24px;max-width:400px;width:90%;">
-    <h2 style="margin-bottom:12px;font-size:16px;">Select Template Room</h2>
-    <p style="font-size:13px;color:#aaa;margin-bottom:12px;">Choose an existing room whose .crm file will be used as a template when creating new rooms.</p>
-    <select id="template-picker-select" style="width:100%;padding:6px;background:#1a1a2e;color:#e0e0e0;border:1px solid #0f3460;border-radius:4px;margin-bottom:16px;">
-      <option value="">(None — skip for now)</option>
-    </select>
-    <div style="display:flex;gap:8px;justify-content:flex-end;">
-      <button id="btn-template-picker-skip" style="padding:6px 14px;background:#333;color:#e0e0e0;border:1px solid #555;border-radius:4px;cursor:pointer;">Skip</button>
-      <button id="btn-template-picker-save" style="padding:6px 14px;background:#0f3460;color:#e0e0e0;border:none;border-radius:4px;cursor:pointer;">Save</button>
+<!-- Base Room Prompt Modal -->
+<div id="baseroom-overlay">
+  <div id="baseroom-modal">
+    <h2>Select Base Room</h2>
+    <p>Choose a .crm file to use as the base for new rooms. When you generate, each new room will start as a copy of this file.</p>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <select id="baseroom-select" style="flex:1;">
+        <option value="">(None &mdash; skip .crm generation)</option>
+      </select>
+      <button type="button" id="btn-refresh-baseroom" title="Refresh .crm file list" style="background:#0f3460;color:#e0e0e0;border:1px solid #1a4a8a;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:14px;line-height:1;">&#x21bb;</button>
+    </div>
+    <div class="btn-row">
+      <button id="btn-baseroom-skip">Skip</button>
+      <button class="save" id="btn-baseroom-save">Save</button>
     </div>
   </div>
 </div>
@@ -992,7 +1088,7 @@ let state = {
   maps: {},
   activeMapId: null,
   templates: {},
-  settings: { descriptionFormat: '{MAP} - {TITLE} {COORDS}' }
+  settings: { descriptionFormat: '{MAP} - {TITLE} {COORDS}', baseRoom: '' }
 };
 
 let mode = 'edit'; // 'edit' or 'display'
@@ -1014,13 +1110,14 @@ async function loadState() {
     if (raw) {
       state = JSON.parse(raw);
       if (!state.templates) state.templates = {};
-      if (!state.settings) state.settings = { descriptionFormat: '{MAP} - {TITLE} {COORDS}' };
+      if (!state.settings) state.settings = { descriptionFormat: '{MAP} - {TITLE} {COORDS}', baseRoom: '' };
+      if (!state.settings.baseRoom) state.settings.baseRoom = '';
     } else {
-      state = { maps: {}, activeMapId: null, templates: {}, settings: { descriptionFormat: '{MAP} - {TITLE} {COORDS}' } };
+      state = { maps: {}, activeMapId: null, templates: {}, settings: { descriptionFormat: '{MAP} - {TITLE} {COORDS}', baseRoom: '' } };
     }
   } catch (e) {
     console.error('Failed to load state:', e);
-    state = { maps: {}, activeMapId: null, templates: {}, settings: { descriptionFormat: '{MAP} - {TITLE} {COORDS}' } };
+    state = { maps: {}, activeMapId: null, templates: {}, settings: { descriptionFormat: '{MAP} - {TITLE} {COORDS}', baseRoom: '' } };
   }
 }
 
@@ -1844,6 +1941,9 @@ $modalOverlay.addEventListener('click', (e) => {
 // Close modals on Escape
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+    if ($baseroomOverlay.classList.contains('visible')) {
+      closeBaseRoomPrompt();
+    }
     if ($settingsOverlay.classList.contains('visible')) {
       closeSettings();
     }
@@ -1892,31 +1992,34 @@ $generateOverlay.addEventListener('click', (e) => {
 const $settingsOverlay = document.getElementById('settings-overlay');
 const $settingsDescFormat = document.getElementById('settings-desc-format');
 const $settingsDescPreview = document.getElementById('settings-desc-preview');
+const $settingsBaseRoom = document.getElementById('settings-base-room');
 
 function updateDescPreview() {
   const fmt = $settingsDescFormat.value || '{MAP} - {TITLE} {COORDS}';
   $settingsDescPreview.textContent = buildDescription('MyMap', 'Entrance', 2, 3, fmt);
 }
 
+async function populateCrmSelect(selectEl, selectedValue) {
+  const options = ['<option value="">(None \u2014 skip .crm generation)</option>'];
+  if (projectPath) {
+    try {
+      const files = await invoke('list_crm_files', { projectPath });
+      for (const f of files) {
+        const selected = (selectedValue === f) ? ' selected' : '';
+        options.push('<option value="' + f + '"' + selected + '>' + f + '</option>');
+      }
+    } catch (e) {
+      console.error('Failed to list .crm files:', e);
+    }
+  }
+  selectEl.innerHTML = options.join('');
+}
+
 async function openSettings() {
   $settingsDescFormat.value = (state.settings && state.settings.descriptionFormat) || '{MAP} - {TITLE} {COORDS}';
-  // Populate template room dropdown
-  const $templateSelect = document.getElementById('settings-template-room');
-  $templateSelect.innerHTML = '<option value="">(None)</option>';
-  try {
-    const crmIds = await invoke('list_crm_files', { projectPath });
-    for (const id of crmIds) {
-      const opt = document.createElement('option');
-      opt.value = id;
-      opt.textContent = `Room ${id}`;
-      if (state.settings.templateRoomId === id) opt.selected = true;
-      $templateSelect.appendChild(opt);
-    }
-  } catch (e) {
-    console.error('Failed to list .crm files:', e);
-  }
   $settingsOverlay.classList.add('visible');
   updateDescPreview();
+  await populateCrmSelect($settingsBaseRoom, state.settings.baseRoom || '');
 }
 
 function closeSettings() {
@@ -1925,8 +2028,7 @@ function closeSettings() {
 
 function saveSettings() {
   state.settings.descriptionFormat = $settingsDescFormat.value || '{MAP} - {TITLE} {COORDS}';
-  const templateVal = document.getElementById('settings-template-room').value;
-  state.settings.templateRoomId = templateVal ? parseInt(templateVal, 10) : null;
+  state.settings.baseRoom = $settingsBaseRoom.value;
   saveState();
   closeSettings();
 }
@@ -1940,11 +2042,53 @@ document.getElementById('btn-settings').addEventListener('click', openSettings);
 document.getElementById('btn-settings-save').addEventListener('click', saveSettings);
 document.getElementById('btn-settings-cancel').addEventListener('click', closeSettings);
 document.getElementById('btn-settings-reset').addEventListener('click', resetDescFormat);
+document.getElementById('btn-refresh-base-room').addEventListener('click', () => {
+  populateCrmSelect($settingsBaseRoom, $settingsBaseRoom.value);
+});
 $settingsDescFormat.addEventListener('input', updateDescPreview);
 
 $settingsOverlay.addEventListener('click', (e) => {
   if (e.target === $settingsOverlay) {
     closeSettings();
+  }
+});
+
+// ══════════════════════════════════════
+//  Base Room Prompt
+// ══════════════════════════════════════
+const $baseroomOverlay = document.getElementById('baseroom-overlay');
+const $baseroomSelect = document.getElementById('baseroom-select');
+
+async function showBaseRoomPrompt() {
+  await populateCrmSelect($baseroomSelect, '');
+  $baseroomOverlay.classList.add('visible');
+}
+
+function closeBaseRoomPrompt() {
+  $baseroomOverlay.classList.remove('visible');
+}
+
+document.getElementById('btn-baseroom-save').addEventListener('click', () => {
+  state.settings.baseRoom = $baseroomSelect.value;
+  saveState();
+  closeBaseRoomPrompt();
+});
+
+document.getElementById('btn-refresh-baseroom').addEventListener('click', () => {
+  populateCrmSelect($baseroomSelect, $baseroomSelect.value);
+});
+
+document.getElementById('btn-baseroom-skip').addEventListener('click', () => {
+  // Mark as explicitly skipped so prompt doesn't reappear
+  state.settings.baseRoom = '';
+  state.settings.baseRoomPrompted = true;
+  saveState();
+  closeBaseRoomPrompt();
+});
+
+$baseroomOverlay.addEventListener('click', (e) => {
+  if (e.target === $baseroomOverlay) {
+    closeBaseRoomPrompt();
   }
 });
 
@@ -2262,6 +2406,54 @@ async function exportBackgroundImages() {
   return changes;
 }
 
+// ── Base Room (.crm) Copy ──
+async function copyBaseRoomFiles() {
+  const changes = [];
+  const baseRoom = state.settings.baseRoom;
+
+  if (!baseRoom) return changes;
+
+  for (const mapId of Object.keys(state.maps)) {
+    const map = state.maps[mapId];
+    for (const key of Object.keys(map.rooms)) {
+      const room = map.rooms[key];
+      if (room.complete) continue;
+      if (room.roomId === null) continue;
+
+      try {
+        const result = await invoke('copy_crm_template', {
+          projectPath,
+          templateFilename: baseRoom,
+          roomId: room.roomId,
+        });
+
+        if (result === 'copied') {
+          changes.push({
+            roomId: room.roomId,
+            type: 'new',
+            detail: `Copied ${baseRoom} \u2192 room${room.roomId}.crm`
+          });
+        } else if (result === 'exists') {
+          changes.push({
+            roomId: room.roomId,
+            type: 'skip',
+            detail: `room${room.roomId}.crm already exists`
+          });
+        }
+      } catch (e) {
+        console.error(`Failed to copy .crm for Room ${room.roomId}:`, e);
+        changes.push({
+          roomId: room.roomId,
+          type: 'skip',
+          detail: `Error copying .crm: ${e}`
+        });
+      }
+    }
+  }
+
+  return changes;
+}
+
 function showConfirmDialog(message) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
@@ -2311,6 +2503,9 @@ $btnGenerate.addEventListener('click', async () => {
 
   // Step 4: Export background images
   const bgChanges = await exportBackgroundImages();
+
+  // Step 5: Copy base room .crm for new rooms
+  const crmChanges = await copyBaseRoomFiles();
 
   $btnGenerate.disabled = false;
   updateGenerateButtonState();
@@ -2365,6 +2560,12 @@ $btnGenerate.addEventListener('click', async () => {
   for (const bc of bgChanges) {
     const entry = roomResults.get(bc.roomId);
     if (entry) entry.changes.push(bc);
+  }
+
+  // Merge base room .crm copy results
+  for (const cc of crmChanges) {
+    const entry = roomResults.get(cc.roomId);
+    if (entry) entry.changes.push(cc);
   }
 
   // ── Compute room-level status ──
@@ -2534,40 +2735,10 @@ async function selectProject(path, name) {
   refreshMapSelect();
   renderGrid();
 
-  // Prompt for template room if not set and .crm files exist
-  if (!state.settings.templateRoomId) {
-    try {
-      const crmIds = await invoke('list_crm_files', { projectPath });
-      if (crmIds.length > 0) {
-        showTemplatePicker(crmIds);
-      }
-    } catch (e) {
-      console.error('Failed to list .crm files:', e);
-    }
+  // Prompt for base room if not yet configured
+  if (!state.settings.baseRoom && !state.settings.baseRoomPrompted) {
+    showBaseRoomPrompt();
   }
-}
-
-function showTemplatePicker(crmIds) {
-  const $overlay = document.getElementById('template-picker-overlay');
-  const $select = document.getElementById('template-picker-select');
-  $select.innerHTML = '<option value="">(None — skip for now)</option>';
-  for (const id of crmIds) {
-    const opt = document.createElement('option');
-    opt.value = id;
-    opt.textContent = `Room ${id}`;
-    $select.appendChild(opt);
-  }
-  $overlay.style.display = 'flex';
-
-  document.getElementById('btn-template-picker-save').onclick = async () => {
-    const val = $select.value;
-    state.settings.templateRoomId = val ? parseInt(val, 10) : null;
-    await saveState();
-    $overlay.style.display = 'none';
-  };
-  document.getElementById('btn-template-picker-skip').onclick = () => {
-    $overlay.style.display = 'none';
-  };
 }
 
 // ══════════════════════════════════════

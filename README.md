@@ -59,6 +59,12 @@ Click a room to open its edit panel where you can set:
 - **Image** — drag-and-drop concept art or a screenshot onto a room cell
 - **Complete** — a checkbox flag meaning "skip AGS code generation" for this room
 
+### Base Room
+
+When you first open a project, the editor prompts you to select a **base room** — an existing `.crm` file from your AGS project that will be used as the starting point for new rooms. During generation, any room that doesn't already have a `.crm` file will get a copy of the base room. This gives new rooms the same hotspot layout, walkable areas, and other properties as the base.
+
+You can change the base room at any time from **Settings**. Set it to "(None)" to skip `.crm` generation entirely.
+
 ### Templates
 
 Right-click a room that has an image to mark it as a **template**. Templates are reusable room designs that can be assigned to other rooms, reducing repetitive work when many rooms share a similar layout. Templates are represented with a red border around them on the map for reference only.
