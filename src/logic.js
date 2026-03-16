@@ -25,6 +25,7 @@ export function makeRoom(x, y) {
     imageFilename: null,
     isTemplate: false,
     templateId: null,
+    lastAppliedTemplateId: null,
     complete: false
   };
 }
@@ -109,6 +110,16 @@ export const ASC_DIRECTIONS = [
   { name: 'Left', dx: -1, dy: 0, crmEventIndex: 0 },
   { name: 'Right', dx: 1, dy: 0, crmEventIndex: 1 }
 ];
+
+export function resolveTemplateSourceRoomId(state, templateId) {
+  const template = state.templates[templateId];
+  if (!template) return null;
+  const map = state.maps[template.sourceMapId];
+  if (!map) return null;
+  const room = map.rooms[template.sourceCoord];
+  if (!room) return null;
+  return room.roomId ?? null;
+}
 
 /**
  * Assign room IDs to unassigned, non-complete rooms.

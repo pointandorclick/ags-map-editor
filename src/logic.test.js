@@ -12,7 +12,8 @@ import {
   sanitizeFilename,
   roomOverallType,
   ASC_DIRECTIONS,
-  assignRoomIdsSync
+  assignRoomIdsSync,
+  resolveTemplateSourceRoomId
 } from './logic.js';
 
 // ─── coordKey ───────────────────────────────────────────
@@ -71,6 +72,7 @@ describe('makeRoom', () => {
       imageFilename: null,
       isTemplate: false,
       templateId: null,
+      lastAppliedTemplateId: null,
       complete: false
     });
   });
@@ -285,6 +287,54 @@ describe('ASC_DIRECTIONS', () => {
     expect(byName.Bottom).toEqual({ name: 'Bottom', dx: 0, dy: -1, crmEventIndex: 2 });
     expect(byName.Left).toEqual({ name: 'Left', dx: -1, dy: 0, crmEventIndex: 0 });
     expect(byName.Right).toEqual({ name: 'Right', dx: 1, dy: 0, crmEventIndex: 1 });
+  });
+});
+
+// ─── resolveTemplateSourceRoomId ────────────────────────
+describe('resolveTemplateSourceRoomId', () => {
+  function makeState(maps, templates) {
+    return { maps, activeMapId: Object.keys(maps)[0] || null, templates: templates || {}, settings: {} };
+  }
+
+  it('resolves a valid template to its source room ID', () => {
+    const room = makeRoom(2, 3);
+    room.roomId = 42;
+    const state = makeState(
+      { m1: { name: 'Map1', rooms: { '2,3': room } } },
+      { t1: { sourceCoord: '2,3', sourceMapId: 'm1' } }
+    );
+    expect(resolveTemplateSourceRoomId(state, 't1')).toBe(42);
+  });
+
+  it('returns null for missing template', () => {
+    const state = makeState({ m1: { name: 'Map1', rooms: {} } }, {});
+    expect(resolveTemplateSourceRoomId(state, 'nonexistent')).toBeNull();
+  });
+
+  it('returns null for missing map', () => {
+    const state = makeState(
+      { m1: { name: 'Map1', rooms: {} } },
+      { t1: { sourceCoord: '0,0', sourceMapId: 'missing' } }
+    );
+    expect(resolveTemplateSourceRoomId(state, 't1')).toBeNull();
+  });
+
+  it('returns null for missing room', () => {
+    const state = makeState(
+      { m1: { name: 'Map1', rooms: {} } },
+      { t1: { sourceCoord: '5,5', sourceMapId: 'm1' } }
+    );
+    expect(resolveTemplateSourceRoomId(state, 't1')).toBeNull();
+  });
+
+  it('returns null when room has null roomId', () => {
+    const room = makeRoom(0, 0);
+    // room.roomId is null by default
+    const state = makeState(
+      { m1: { name: 'Map1', rooms: { '0,0': room } } },
+      { t1: { sourceCoord: '0,0', sourceMapId: 'm1' } }
+    );
+    expect(resolveTemplateSourceRoomId(state, 't1')).toBeNull();
   });
 });
 
