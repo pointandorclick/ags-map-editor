@@ -2746,6 +2746,16 @@ async function selectProject(path, name) {
   $toolbar.style.display = '';
   $viewport.style.display = '';
   await loadState();
+
+  // Migrate existing base room config: copy .crm into BaseRoom/ if needed
+  if (state.settings.baseRoom) {
+    try {
+      await invoke('save_base_room', { projectPath, templateFilename: state.settings.baseRoom });
+    } catch (e) {
+      console.warn('Base room migration failed (source file may be missing):', e);
+    }
+  }
+
   await refreshRoomIds();
   refreshMapSelect();
   renderGrid();
