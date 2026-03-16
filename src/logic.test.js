@@ -281,10 +281,10 @@ describe('ASC_DIRECTIONS', () => {
 
   it('has correct deltas', () => {
     const byName = Object.fromEntries(ASC_DIRECTIONS.map((d) => [d.name, d]));
-    expect(byName.Top).toEqual({ name: 'Top', dx: 0, dy: 1 });
-    expect(byName.Bottom).toEqual({ name: 'Bottom', dx: 0, dy: -1 });
-    expect(byName.Left).toEqual({ name: 'Left', dx: -1, dy: 0 });
-    expect(byName.Right).toEqual({ name: 'Right', dx: 1, dy: 0 });
+    expect(byName.Top).toEqual({ name: 'Top', dx: 0, dy: 1, crmEventIndex: 3 });
+    expect(byName.Bottom).toEqual({ name: 'Bottom', dx: 0, dy: -1, crmEventIndex: 2 });
+    expect(byName.Left).toEqual({ name: 'Left', dx: -1, dy: 0, crmEventIndex: 0 });
+    expect(byName.Right).toEqual({ name: 'Right', dx: 1, dy: 0, crmEventIndex: 1 });
   });
 });
 
