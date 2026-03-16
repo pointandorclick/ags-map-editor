@@ -520,6 +520,40 @@ fn save_base_room(project_path: String, template_filename: String) -> Result<(),
 }
 
 #[tauri::command]
+fn copy_all_room_files(
+    project_path: String,
+    source_room_id: u32,
+    target_room_id: u32,
+    force: bool,
+) -> Result<Vec<String>, String> {
+    let dir = Path::new(&project_path);
+    let prefix = format!("room{}.", source_room_id);
+    let entries = fs::read_dir(dir).map_err(|e| e.to_string())?;
+    let mut results: Vec<String> = Vec::new();
+
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.starts_with(&prefix) {
+            continue;
+        }
+        let ext = &name[prefix.len() - 1..]; // includes the dot, e.g. ".crm"
+        let target_name = format!("room{}{}", target_room_id, ext);
+        let target_path = dir.join(&target_name);
+
+        if target_path.exists() && !force {
+            results.push(format!("skipped:{}", target_name));
+        } else {
+            fs::copy(entry.path(), &target_path).map_err(|e| e.to_string())?;
+            results.push(format!("copied:{}", target_name));
+        }
+    }
+
+    results.sort();
+    Ok(results)
+}
+
+#[tauri::command]
 fn check_background_matches(
     project_path: String,
     filename: String,
@@ -801,6 +835,59 @@ mod tests {
         assert!(!result);
         let _ = fs::remove_dir_all(&dir);
     }
+
+    // ── copy_all_room_files ───────────────────────────────────
+
+    #[test]
+    fn copy_all_room_files_basic_copy() {
+        let dir = temp_project_dir("copy_all_basic");
+        let path = dir.to_string_lossy().to_string();
+        fs::write(dir.join("room5.crm"), b"crm-data").unwrap();
+        fs::write(dir.join("room5.asc"), b"script-data").unwrap();
+
+        let result = copy_all_room_files(path, 5, 10, false).unwrap();
+        assert_eq!(result, vec!["copied:room10.asc", "copied:room10.crm"]);
+        assert_eq!(fs::read_to_string(dir.join("room10.crm")).unwrap(), "crm-data");
+        assert_eq!(fs::read_to_string(dir.join("room10.asc")).unwrap(), "script-data");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn copy_all_room_files_force_overwrite() {
+        let dir = temp_project_dir("copy_all_force");
+        let path = dir.to_string_lossy().to_string();
+        fs::write(dir.join("room1.crm"), b"new-data").unwrap();
+        fs::write(dir.join("room2.crm"), b"old-data").unwrap();
+
+        let result = copy_all_room_files(path, 1, 2, true).unwrap();
+        assert_eq!(result, vec!["copied:room2.crm"]);
+        assert_eq!(fs::read_to_string(dir.join("room2.crm")).unwrap(), "new-data");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn copy_all_room_files_skip_existing() {
+        let dir = temp_project_dir("copy_all_skip");
+        let path = dir.to_string_lossy().to_string();
+        fs::write(dir.join("room1.crm"), b"source").unwrap();
+        fs::write(dir.join("room2.crm"), b"existing").unwrap();
+
+        let result = copy_all_room_files(path, 1, 2, false).unwrap();
+        assert_eq!(result, vec!["skipped:room2.crm"]);
+        assert_eq!(fs::read_to_string(dir.join("room2.crm")).unwrap(), "existing");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn copy_all_room_files_no_source_files() {
+        let dir = temp_project_dir("copy_all_none");
+        let path = dir.to_string_lossy().to_string();
+        fs::write(dir.join("room99.crm"), b"other").unwrap();
+
+        let result = copy_all_room_files(path, 1, 2, false).unwrap();
+        assert!(result.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -828,6 +915,7 @@ pub fn run() {
             list_crm_room_ids,
             copy_room_crm,
             save_base_room,
+            copy_all_room_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
