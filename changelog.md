@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.2.1
+- feat: Use a room template provided by the user to create future rooms.
+
 ## v1.1.1
 - fix: dynamically scan project for room IDs and assign new IDs on generate
 - fix: update GitHub Actions to v5 for Node.js 24 support
