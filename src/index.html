@@ -2437,9 +2437,8 @@ async function copyBaseRoomFiles() {
       if (room.roomId === null) continue;
 
       try {
-        const result = await invoke('copy_crm_template', {
+        const result = await invoke('copy_base_room_file', {
           projectPath,
-          templateFilename: baseRoom,
           roomId: room.roomId,
         });
 
@@ -2447,7 +2446,7 @@ async function copyBaseRoomFiles() {
           changes.push({
             roomId: room.roomId,
             type: 'new',
-            detail: `Copied ${baseRoom} \u2192 room${room.roomId}.crm`
+            detail: `Copied BaseRoom/base-room.crm \u2192 room${room.roomId}.crm`
           });
         } else if (result === 'exists') {
           changes.push({

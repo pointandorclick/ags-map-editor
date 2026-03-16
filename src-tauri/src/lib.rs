@@ -219,13 +219,12 @@ fn list_crm_files(project_path: String) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-fn copy_crm_template(
+fn copy_base_room_file(
     project_path: String,
-    template_filename: String,
     room_id: u32,
 ) -> Result<String, String> {
     let project_dir = Path::new(&project_path);
-    let source = project_dir.join(&template_filename);
+    let source = project_dir.join("BaseRoom").join("base-room.crm");
     let target = project_dir.join(format!("room{}.crm", room_id));
 
     if target.exists() {
@@ -233,7 +232,7 @@ fn copy_crm_template(
     }
 
     if !source.exists() {
-        return Err(format!("Base room file not found: {}", template_filename));
+        return Err("Base room file not found: BaseRoom/base-room.crm".to_string());
     }
 
     fs::copy(&source, &target).map_err(|e| e.to_string())?;
@@ -822,7 +821,7 @@ pub fn run() {
             export_background_image,
             list_room_ids,
             list_crm_files,
-            copy_crm_template,
+            copy_base_room_file,
             check_file_exists,
             check_background_matches,
             update_crm_room_events,
