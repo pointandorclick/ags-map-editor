@@ -919,6 +919,7 @@ body {
 <div id="generate-overlay">
   <div id="generate-modal">
     <h2>Generation Results</h2>
+    <div id="generate-warnings" style="display:none;background:#fff3cd;color:#856404;border:1px solid #ffc107;border-radius:4px;padding:10px 14px;margin-bottom:10px;font-size:13px;"></div>
     <textarea id="generate-summary" placeholder="Summary will appear here..." readonly></textarea>
     <div id="generate-results-list"></div>
     <button class="close-btn" id="btn-generate-close">Close</button>
@@ -936,10 +937,30 @@ body {
       <span class="preview-label">Preview:</span>
       <span id="settings-desc-preview"></span>
     </div>
+    <label for="settings-template-room" style="margin-top:12px;">Template Room (.crm)</label>
+    <select id="settings-template-room">
+      <option value="">(None)</option>
+    </select>
+    <div class="token-help">New rooms will be created by copying this room's .crm file</div>
     <div class="btn-row">
       <button id="btn-settings-reset">Reset to Default</button>
       <button id="btn-settings-cancel">Cancel</button>
       <button class="save" id="btn-settings-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Template Room Picker Modal (shown on project open when no template is set) -->
+<div id="template-picker-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;display:none;align-items:center;justify-content:center;">
+  <div style="background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:24px;max-width:400px;width:90%;">
+    <h2 style="margin-bottom:12px;font-size:16px;">Select Template Room</h2>
+    <p style="font-size:13px;color:#aaa;margin-bottom:12px;">Choose an existing room whose .crm file will be used as a template when creating new rooms.</p>
+    <select id="template-picker-select" style="width:100%;padding:6px;background:#1a1a2e;color:#e0e0e0;border:1px solid #0f3460;border-radius:4px;margin-bottom:16px;">
+      <option value="">(None — skip for now)</option>
+    </select>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button id="btn-template-picker-skip" style="padding:6px 14px;background:#333;color:#e0e0e0;border:1px solid #555;border-radius:4px;cursor:pointer;">Skip</button>
+      <button id="btn-template-picker-save" style="padding:6px 14px;background:#0f3460;color:#e0e0e0;border:none;border-radius:4px;cursor:pointer;">Save</button>
     </div>
   </div>
 </div>
@@ -952,7 +973,6 @@ import {
 } from './logic.js';
 
 const { invoke } = window.__TAURI__.core;
-
 // ══════════════════════════════════════
 //  Constants
 // ══════════════════════════════════════
@@ -1878,8 +1898,23 @@ function updateDescPreview() {
   $settingsDescPreview.textContent = buildDescription('MyMap', 'Entrance', 2, 3, fmt);
 }
 
-function openSettings() {
+async function openSettings() {
   $settingsDescFormat.value = (state.settings && state.settings.descriptionFormat) || '{MAP} - {TITLE} {COORDS}';
+  // Populate template room dropdown
+  const $templateSelect = document.getElementById('settings-template-room');
+  $templateSelect.innerHTML = '<option value="">(None)</option>';
+  try {
+    const crmIds = await invoke('list_crm_files', { projectPath });
+    for (const id of crmIds) {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = `Room ${id}`;
+      if (state.settings.templateRoomId === id) opt.selected = true;
+      $templateSelect.appendChild(opt);
+    }
+  } catch (e) {
+    console.error('Failed to list .crm files:', e);
+  }
   $settingsOverlay.classList.add('visible');
   updateDescPreview();
 }
@@ -1890,6 +1925,8 @@ function closeSettings() {
 
 function saveSettings() {
   state.settings.descriptionFormat = $settingsDescFormat.value || '{MAP} - {TITLE} {COORDS}';
+  const templateVal = document.getElementById('settings-template-room').value;
+  state.settings.templateRoomId = templateVal ? parseInt(templateVal, 10) : null;
   saveState();
   closeSettings();
 }
@@ -2025,6 +2062,47 @@ async function generateRoomScripts() {
         } catch (e) {
           console.error(`Failed to write room${room.roomId}.asc:`, e);
           roomChanges.actions.push({ type: 'skip', detail: `Error writing file: ${e}` });
+        }
+      }
+
+      // Copy template .crm if this room doesn't have one
+      if (state.settings.templateRoomId) {
+        try {
+          const created = await invoke('copy_room_crm', {
+            projectPath,
+            templateRoomId: state.settings.templateRoomId,
+            targetRoomId: room.roomId
+          });
+          if (created) {
+            roomChanges.actions.push({ type: 'new', detail: `Created room${room.roomId}.crm from template room ${state.settings.templateRoomId}` });
+          }
+        } catch (e) {
+          roomChanges.actions.push({ type: 'skip', detail: `Failed to create .crm: ${e}` });
+        }
+      }
+
+      // Register leave events in .crm file (only sets empty slots, won't overwrite existing)
+      const crmUpdates = [];
+      for (const dir of ASC_DIRECTIONS) {
+        if (adjacencies[dir.name] !== undefined) {
+          crmUpdates.push({ index: dir.crmEventIndex, handler: `room_Leave${dir.name}` });
+        }
+      }
+      if (crmUpdates.length > 0) {
+        try {
+          const crmChanges = await invoke('update_crm_room_events', {
+            projectPath, roomId: room.roomId, updates: crmUpdates
+          });
+          for (const change of crmChanges) {
+            roomChanges.actions.push({ type: 'update', detail: change });
+          }
+        } catch (e) {
+          const msg = String(e);
+          if (msg.includes('not found')) {
+            roomChanges.actions.push({ type: 'skip', detail: `room${room.roomId}.crm not found — build in AGS first, then re-generate to register events` });
+          } else {
+            roomChanges.actions.push({ type: 'skip', detail: `.crm event update failed: ${msg}` });
+          }
         }
       }
 
@@ -2298,6 +2376,35 @@ $btnGenerate.addEventListener('click', async () => {
     else skipCount++;
   }
 
+  // ── Check for global warnings ──
+  const $warnings = document.getElementById('generate-warnings');
+  const warningMessages = [];
+
+  // Check for .crm-related skips
+  let hasCrmSkips = false;
+  for (const [, entry] of roomResults) {
+    for (const c of entry.changes) {
+      if (c.type === 'skip' && (c.detail.includes('.crm') || c.detail.includes('CRM'))) {
+        hasCrmSkips = true;
+        break;
+      }
+    }
+    if (hasCrmSkips) break;
+  }
+  if (hasCrmSkips) {
+    warningMessages.push('Some rooms could not have events registered in their .crm files. Build these rooms in AGS Editor first, then re-generate.');
+  }
+  if (!state.settings.templateRoomId) {
+    warningMessages.push('No template room is configured. New rooms will not have .crm files created automatically. Set a template room in Settings.');
+  }
+
+  if (warningMessages.length > 0) {
+    $warnings.innerHTML = warningMessages.map(m => `<div style="margin-bottom:4px;">&#9888; ${m}</div>`).join('');
+    $warnings.style.display = 'block';
+  } else {
+    $warnings.style.display = 'none';
+  }
+
   // ── Populate results modal ──
   const $summary = document.getElementById('generate-summary');
   const $resultsList = document.getElementById('generate-results-list');
@@ -2426,6 +2533,41 @@ async function selectProject(path, name) {
   await refreshRoomIds();
   refreshMapSelect();
   renderGrid();
+
+  // Prompt for template room if not set and .crm files exist
+  if (!state.settings.templateRoomId) {
+    try {
+      const crmIds = await invoke('list_crm_files', { projectPath });
+      if (crmIds.length > 0) {
+        showTemplatePicker(crmIds);
+      }
+    } catch (e) {
+      console.error('Failed to list .crm files:', e);
+    }
+  }
+}
+
+function showTemplatePicker(crmIds) {
+  const $overlay = document.getElementById('template-picker-overlay');
+  const $select = document.getElementById('template-picker-select');
+  $select.innerHTML = '<option value="">(None — skip for now)</option>';
+  for (const id of crmIds) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = `Room ${id}`;
+    $select.appendChild(opt);
+  }
+  $overlay.style.display = 'flex';
+
+  document.getElementById('btn-template-picker-save').onclick = async () => {
+    const val = $select.value;
+    state.settings.templateRoomId = val ? parseInt(val, 10) : null;
+    await saveState();
+    $overlay.style.display = 'none';
+  };
+  document.getElementById('btn-template-picker-skip').onclick = () => {
+    $overlay.style.display = 'none';
+  };
 }
 
 // ══════════════════════════════════════

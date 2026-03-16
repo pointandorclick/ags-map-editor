@@ -104,10 +104,10 @@ export function roomOverallType(changes) {
 }
 
 export const ASC_DIRECTIONS = [
-  { name: 'Top', dx: 0, dy: 1 },
-  { name: 'Bottom', dx: 0, dy: -1 },
-  { name: 'Left', dx: -1, dy: 0 },
-  { name: 'Right', dx: 1, dy: 0 }
+  { name: 'Top', dx: 0, dy: 1, crmEventIndex: 3 },
+  { name: 'Bottom', dx: 0, dy: -1, crmEventIndex: 2 },
+  { name: 'Left', dx: -1, dy: 0, crmEventIndex: 0 },
+  { name: 'Right', dx: 1, dy: 0, crmEventIndex: 1 }
 ];
 
 /**

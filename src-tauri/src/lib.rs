@@ -204,6 +204,263 @@ fn check_file_exists(file_path: String) -> Result<bool, String> {
     Ok(Path::new(&file_path).exists())
 }
 
+/// Room event indices in the .crm binary format:
+/// 0 = Walks off left edge,  1 = Walks off right edge,
+/// 2 = Walks off bottom edge, 3 = Walks off top edge
+
+#[derive(Deserialize)]
+struct CrmEventUpdate {
+    index: usize,
+    handler: String,
+}
+
+/// Find the Main block (block ID 1) in a .crm file by parsing the block header structure.
+/// Returns (data_start, data_length) of the Main block.
+fn find_main_block(data: &[u8]) -> Result<(usize, usize), String> {
+    if data.len() < 2 {
+        return Err("File too small".into());
+    }
+    let version = u16::from_le_bytes([data[0], data[1]]);
+    let use_64bit = version >= 32; // kRoomVersion_350
+
+    let mut pos: usize = 2;
+    loop {
+        if pos >= data.len() {
+            return Err("Unexpected end of file while scanning blocks".into());
+        }
+        let block_id = data[pos] as i8;
+        pos += 1;
+
+        if block_id < 0 {
+            return Err("Main block not found (reached end-of-block-list)".into());
+        }
+
+        if block_id > 0 {
+            let block_len = if use_64bit {
+                if pos + 8 > data.len() {
+                    return Err("Truncated block header".into());
+                }
+                let len = i64::from_le_bytes(data[pos..pos + 8].try_into().unwrap());
+                pos += 8;
+                len as usize
+            } else {
+                if pos + 4 > data.len() {
+                    return Err("Truncated block header".into());
+                }
+                let len = i32::from_le_bytes(data[pos..pos + 4].try_into().unwrap());
+                pos += 4;
+                len as usize
+            };
+
+            if block_id == 1 {
+                return Ok((pos, block_len));
+            }
+            pos += block_len;
+        } else {
+            // Extension block: 16-byte string ID + 8-byte length
+            if pos + 24 > data.len() {
+                return Err("Truncated extension block header".into());
+            }
+            pos += 16;
+            let block_len = i64::from_le_bytes(data[pos..pos + 8].try_into().unwrap()) as usize;
+            pos += 8;
+            pos += block_len;
+        }
+    }
+}
+
+/// Read a little-endian u32 at the given offset.
+fn read_u32(data: &[u8], pos: usize) -> u32 {
+    u32::from_le_bytes(data[pos..pos + 4].try_into().unwrap())
+}
+
+/// Parse null-terminated event handler strings from the data.
+fn parse_event_strings(data: &[u8], start: usize, count: usize) -> Result<(Vec<String>, usize), String> {
+    let mut pos = start;
+    let mut events = Vec::with_capacity(count);
+    for i in 0..count {
+        let null_pos = data[pos..]
+            .iter()
+            .position(|&b| b == 0)
+            .ok_or_else(|| format!("Missing null terminator for event {}", i))?;
+        let name = String::from_utf8_lossy(&data[pos..pos + null_pos]).to_string();
+        events.push(name);
+        pos = pos + null_pos + 1;
+    }
+    Ok((events, pos))
+}
+
+/// Validate that parsed strings look like plausible AGS event handler names.
+fn looks_like_event_handlers(events: &[String]) -> bool {
+    events.iter().all(|s| {
+        s.is_empty()
+            || s.starts_with("room_")
+            || (s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') && s.len() < 80)
+    })
+}
+
+#[tauri::command]
+fn update_crm_room_events(
+    project_path: String,
+    room_id: u32,
+    updates: Vec<CrmEventUpdate>,
+) -> Result<Vec<String>, String> {
+    let crm_path = Path::new(&project_path).join(format!("room{}.crm", room_id));
+    if !crm_path.exists() {
+        return Err(format!("room{}.crm not found — build in AGS Editor first, then re-generate", room_id));
+    }
+
+    let data = fs::read(&crm_path).map_err(|e| e.to_string())?;
+
+    // Find the Main block by parsing the .crm block structure
+    let (main_start, main_len) = find_main_block(&data)?;
+    let main_end = main_start + main_len;
+
+    // Within the Main block, find the room event handlers.
+    // The AGS format writes: [int32 legacy_vars=0] [int32 region_count] [event_handlers...]
+    // Event handlers start with int32 event_count followed by null-terminated strings.
+    // Search within the Main block for a valid event section.
+    let mut events_count_pos = None;
+    let mut event_count = 0usize;
+
+    // Search for a 4-byte event count followed by valid null-terminated event handler strings.
+    // The event count is preceded by [int32=0 (legacy vars)] [int32 region_count].
+    let search_end = main_end.min(data.len());
+    let mut scan = main_start;
+    while scan + 12 <= search_end {
+        let legacy_vars = read_u32(&data, scan);
+        let region_count = read_u32(&data, scan + 4);
+        let evt_count = read_u32(&data, scan + 8) as usize;
+
+        if legacy_vars == 0 && region_count == 16 && (5..=15).contains(&evt_count) {
+            // Candidate found — try parsing the event strings
+            let str_start = scan + 12;
+            if let Ok((events, _)) = parse_event_strings(&data, str_start, evt_count) {
+                if looks_like_event_handlers(&events) {
+                    events_count_pos = Some(scan + 8);
+                    event_count = evt_count;
+                    break;
+                }
+            }
+        }
+        scan += 1;
+    }
+
+    let events_count_pos =
+        events_count_pos.ok_or_else(|| format!("Could not locate event section in room{}.crm", room_id))?;
+    let events_start = events_count_pos + 4; // after the event count int32
+
+    // Parse the event handler strings
+    let (events, events_end) = parse_event_strings(&data, events_start, event_count)?;
+
+    // Apply updates (only set handlers for empty slots to avoid overwriting user customizations)
+    let mut changes = Vec::new();
+    let mut new_events = events.clone();
+    for update in &updates {
+        if update.index >= event_count {
+            continue;
+        }
+        if new_events[update.index] == update.handler {
+            changes.push(format!(
+                "{} already registered in .crm",
+                update.handler
+            ));
+        } else if new_events[update.index].is_empty() && !update.handler.is_empty() {
+            new_events[update.index] = update.handler.clone();
+            changes.push(format!(
+                "Registered {} in .crm",
+                update.handler
+            ));
+        } else if !new_events[update.index].is_empty() {
+            changes.push(format!(
+                "Slot {} already has '{}', skipped {}",
+                update.index, new_events[update.index], update.handler
+            ));
+        }
+    }
+
+    if new_events == events {
+        return Ok(changes);
+    }
+
+    // Rebuild the event section bytes (null-terminated strings only, count stays the same)
+    let mut new_section = Vec::new();
+    for event in &new_events {
+        new_section.extend_from_slice(event.as_bytes());
+        new_section.push(0);
+    }
+
+    // Reassemble: [before events] [new event strings] [after old events]
+    let mut new_data = Vec::with_capacity(data.len());
+    new_data.extend_from_slice(&data[..events_start]);
+    new_data.extend_from_slice(&new_section);
+    new_data.extend_from_slice(&data[events_end..]);
+
+    // Update the Main block length in the header since event strings may have changed size
+    let size_diff = new_data.len() as i64 - data.len() as i64;
+    if size_diff != 0 {
+        let version = u16::from_le_bytes([data[0], data[1]]);
+        // Block header is at offset 2: 1 byte block_id + 8 bytes length (for version >= 32)
+        if version >= 32 {
+            let len_offset = 3; // after version (2) + block_id (1)
+            let old_len = i64::from_le_bytes(new_data[len_offset..len_offset + 8].try_into().unwrap());
+            let new_len = old_len + size_diff;
+            new_data[len_offset..len_offset + 8].copy_from_slice(&new_len.to_le_bytes());
+        } else {
+            let len_offset = 3;
+            let old_len = i32::from_le_bytes(new_data[len_offset..len_offset + 4].try_into().unwrap());
+            let new_len = old_len + size_diff as i32;
+            new_data[len_offset..len_offset + 4].copy_from_slice(&new_len.to_le_bytes());
+        }
+    }
+
+    fs::write(&crm_path, new_data).map_err(|e| e.to_string())?;
+
+    Ok(changes)
+}
+
+#[tauri::command]
+fn list_crm_files(project_path: String) -> Result<Vec<u32>, String> {
+    let dir = Path::new(&project_path);
+    let mut ids: Vec<u32> = fs::read_dir(dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with("room") && name.ends_with(".crm") {
+                name[4..name.len() - 4].parse::<u32>().ok()
+            } else {
+                None
+            }
+        })
+        .collect();
+    ids.sort();
+    ids.dedup();
+    Ok(ids)
+}
+
+#[tauri::command]
+fn copy_room_crm(
+    project_path: String,
+    template_room_id: u32,
+    target_room_id: u32,
+) -> Result<bool, String> {
+    let dir = Path::new(&project_path);
+    let target_path = dir.join(format!("room{}.crm", target_room_id));
+    if target_path.exists() {
+        return Ok(false);
+    }
+    let template_path = dir.join(format!("room{}.crm", template_room_id));
+    if !template_path.exists() {
+        return Err(format!(
+            "Template room{}.crm not found in project",
+            template_room_id
+        ));
+    }
+    fs::copy(&template_path, &target_path).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 #[tauri::command]
 fn check_background_matches(
     project_path: String,
@@ -472,6 +729,9 @@ pub fn run() {
             list_room_ids,
             check_file_exists,
             check_background_matches,
+            update_crm_room_events,
+            list_crm_files,
+            copy_room_crm,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
