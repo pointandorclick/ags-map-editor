@@ -503,6 +503,24 @@ fn copy_room_crm(
 }
 
 #[tauri::command]
+fn save_base_room(project_path: String, template_filename: String) -> Result<(), String> {
+    let project_dir = Path::new(&project_path);
+    let source = project_dir.join(&template_filename);
+
+    if !source.exists() {
+        return Err(format!("Source file not found: {}", template_filename));
+    }
+
+    let base_room_dir = project_dir.join("BaseRoom");
+    fs::create_dir_all(&base_room_dir).map_err(|e| e.to_string())?;
+
+    let target = base_room_dir.join("base-room.crm");
+    fs::copy(&source, &target).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 fn check_background_matches(
     project_path: String,
     filename: String,
@@ -701,6 +719,41 @@ mod tests {
 
     // ── check_background_matches ───────────────────────────
 
+    // ── save_base_room ───────────────────────────────────
+
+    #[test]
+    fn save_base_room_copies_file() {
+        let dir = temp_project_dir("save_base_room_ok");
+        let crm_data = vec![0x01, 0x02, 0x03, 0x04];
+        fs::write(dir.join("room1.crm"), &crm_data).unwrap();
+
+        save_base_room(dir.to_string_lossy().to_string(), "room1.crm".into()).unwrap();
+
+        let saved = fs::read(dir.join("BaseRoom").join("base-room.crm")).unwrap();
+        assert_eq!(saved, crm_data);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn save_base_room_creates_base_room_dir() {
+        let dir = temp_project_dir("save_base_room_mkdir");
+        fs::write(dir.join("template.crm"), b"data").unwrap();
+
+        assert!(!dir.join("BaseRoom").exists());
+        save_base_room(dir.to_string_lossy().to_string(), "template.crm".into()).unwrap();
+        assert!(dir.join("BaseRoom").join("base-room.crm").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn save_base_room_errors_on_missing_source() {
+        let dir = temp_project_dir("save_base_room_missing");
+        let result = save_base_room(dir.to_string_lossy().to_string(), "nonexistent.crm".into());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Source file not found"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn check_background_matches_true() {
         let dir = temp_project_dir("bg_match");
@@ -775,6 +828,7 @@ pub fn run() {
             update_crm_room_events,
             list_crm_room_ids,
             copy_room_crm,
+            save_base_room,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
