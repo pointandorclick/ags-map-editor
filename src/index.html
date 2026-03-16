@@ -1887,6 +1887,9 @@ document.getElementById('btn-edit-save').addEventListener('click', () => {
       updates.imageDataUrl = template.imageDataUrl;
       updates.imageFilename = '(from template: ' + template.name + ')';
     }
+  } else {
+    // Template cleared — reset so re-assigning triggers a fresh copy
+    updates.lastAppliedTemplateId = null;
   }
 
   updateRoom(x, y, updates);
