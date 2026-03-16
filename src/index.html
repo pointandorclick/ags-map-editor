@@ -504,6 +504,18 @@ body {
   text-overflow: ellipsis;
 }
 
+#project-overlay .warning-notice {
+  background: #2a2a1e;
+  border: 1px solid #8a7a2a;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  color: #d4c96a;
+  line-height: 1.5;
+  text-align: left;
+}
+
 /* ── Generate Button ── */
 #btn-generate {
   background: #2e7d32;
@@ -807,6 +819,7 @@ body {
 <div id="project-overlay">
   <div class="overlay-content">
     <h1>AGS Map Editor</h1>
+    <div class="warning-notice">Although this tool has been tested and used in production games, it does edit your AGS source code. As such you should ensure you have a backup before using the Generate feature.</div>
     <button class="open-btn" id="btn-open-project">Open AGS Project...</button>
     <div class="error-msg" id="project-error"></div>
     <div class="recent-section" id="recent-section" style="display:none;">
