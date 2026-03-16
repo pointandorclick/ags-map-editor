@@ -6,9 +6,11 @@
     "tauri": "tauri",
     "check-build-path": "node scripts/check-build-path.js",
     "dev": "npm run check-build-path && tauri dev",
-    "build": "npm run check-build-path && tauri build"
+    "build": "npm run check-build-path && tauri build",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@tauri-apps/cli": "^2",
+    "vitest": "^4.1.0"
   }
 }

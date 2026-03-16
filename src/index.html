@@ -944,7 +944,15 @@ body {
   </div>
 </div>
 
-<script>
+<script type="module">
+import {
+  coordKey, parseCoord, coordDisplay, makeRoom, generateId,
+  buildDescription, buildAscDescription, buildLeaveFunction, parseLeaveFunction,
+  sanitizeFilename, roomOverallType, ASC_DIRECTIONS, assignRoomIdsSync
+} from './logic.js';
+
+const { invoke } = window.__TAURI__.core;
+
 // ══════════════════════════════════════
 //  Constants
 // ══════════════════════════════════════
@@ -1007,9 +1015,6 @@ async function saveState() {
 // ══════════════════════════════════════
 //  Map CRUD
 // ══════════════════════════════════════
-function generateId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-}
 
 function createMap(name) {
   const id = generateId();
@@ -1036,14 +1041,6 @@ function getActiveMap() {
 // ══════════════════════════════════════
 //  Room CRUD
 // ══════════════════════════════════════
-function coordKey(x, y) { return `${x},${y}`; }
-
-function parseCoord(key) {
-  const [x, y] = key.split(',').map(Number);
-  return { x, y };
-}
-
-function coordDisplay(x, y) { return `${x}x${y}`; }
 
 function pixelToGridCoord(clientX, clientY) {
   const rect = $gridContainer.getBoundingClientRect();
@@ -1091,20 +1088,6 @@ async function refreshRoomIds() {
   } catch (e) {
     console.error('Failed to list room IDs:', e);
   }
-}
-
-function makeRoom(x, y) {
-  return {
-    x, y,
-    roomId: null,
-    title: '',
-    notes: '',
-    imageDataUrl: null,
-    imageFilename: null,
-    isTemplate: false,
-    templateId: null,
-    complete: false
-  };
 }
 
 function addRoom(x, y) {
@@ -1892,13 +1875,7 @@ const $settingsDescPreview = document.getElementById('settings-desc-preview');
 
 function updateDescPreview() {
   const fmt = $settingsDescFormat.value || '{MAP} - {TITLE} {COORDS}';
-  const preview = fmt
-    .replace(/\{MAP\}/g, 'MyMap')
-    .replace(/\{TITLE\}/g, 'Entrance')
-    .replace(/\{COORDS\}/g, coordDisplay(2, 3))
-    .replace(/\{X\}/g, 2)
-    .replace(/\{Y\}/g, 3);
-  $settingsDescPreview.textContent = preview;
+  $settingsDescPreview.textContent = buildDescription('MyMap', 'Entrance', 2, 3, fmt);
 }
 
 function openSettings() {
@@ -1937,107 +1914,10 @@ $settingsOverlay.addEventListener('click', (e) => {
 // ── Room ID Auto-Assignment ──
 async function assignRoomIds() {
   await refreshRoomIds();
-  // Collect all used room IDs across ALL maps
-  const usedIds = new Set();
-  for (const mapId of Object.keys(state.maps)) {
-    const rooms = state.maps[mapId].rooms;
-    for (const key of Object.keys(rooms)) {
-      if (rooms[key].roomId !== null) {
-        usedIds.add(rooms[key].roomId);
-      }
-    }
-  }
-
-  // Collect all unassigned, non-complete rooms across all maps
-  const unassigned = [];
-  for (const mapId of Object.keys(state.maps)) {
-    const rooms = state.maps[mapId].rooms;
-    for (const key of Object.keys(rooms)) {
-      const room = rooms[key];
-      if (room.roomId === null && !room.complete) {
-        unassigned.push({ mapId, key, room });
-      }
-    }
-  }
-
-  // Assign next available IDs (skip IDs already used by maps or existing room files)
-  const existingFileIds = new Set(ROOM_IDS);
-  const assignments = [];
-  let nextId = 1;
-  for (const entry of unassigned) {
-    while (usedIds.has(nextId) || existingFileIds.has(nextId)) {
-      nextId++;
-    }
-    entry.room.roomId = nextId;
-    usedIds.add(nextId);
-    assignments.push({
-      mapId: entry.mapId,
-      mapName: state.maps[entry.mapId].name,
-      coord: entry.key,
-      roomId: nextId
-    });
-    nextId++;
-  }
-
-  return assignments;
+  return assignRoomIdsSync(state, ROOM_IDS);
 }
 
 // ── Room Script (.asc) Generation ──
-const ASC_DIRECTIONS = [
-  { name: 'Top', dx: 0, dy: 1 },
-  { name: 'Bottom', dx: 0, dy: -1 },
-  { name: 'Left', dx: -1, dy: 0 },
-  { name: 'Right', dx: 1, dy: 0 }
-];
-
-function buildDescription(mapName, roomTitle, x, y) {
-  const fmt = (state.settings && state.settings.descriptionFormat) || '{MAP} - {TITLE} {COORDS}';
-  return fmt
-    .replace(/\{MAP\}/g, mapName)
-    .replace(/\{TITLE\}/g, roomTitle)
-    .replace(/\{COORDS\}/g, coordDisplay(x, y))
-    .replace(/\{X\}/g, x)
-    .replace(/\{Y\}/g, y);
-}
-
-function buildAscDescription(mapName, roomTitle, x, y) {
-  return `// ${buildDescription(mapName, roomTitle, x, y)}`;
-}
-
-function buildLeaveFunction(dir, adjacentRoomId) {
-  return `function room_Leave${dir}()\n{\n  player.ChangeRoomAutoPosition(${adjacentRoomId});\n}`;
-}
-
-function parseLeaveFunction(content, dir) {
-  const funcPattern = new RegExp(`function\\s+room_Leave${dir}\\s*\\(\\s*\\)`);
-  const match = content.match(funcPattern);
-  if (!match) return null;
-
-  const funcStart = match.index;
-  const braceStart = content.indexOf('{', funcStart + match[0].length);
-  if (braceStart === -1) return null;
-
-  let depth = 1;
-  let i = braceStart + 1;
-  while (i < content.length && depth > 0) {
-    if (content[i] === '{') depth++;
-    else if (content[i] === '}') depth--;
-    i++;
-  }
-  if (depth !== 0) return null;
-
-  const funcEnd = i;
-  const body = content.substring(braceStart + 1, funcEnd - 1);
-  const statements = body.split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0 && !line.startsWith('//'));
-
-  const isSimple = statements.length === 0 ||
-    (statements.length === 1 &&
-    /^player\.ChangeRoomAutoPosition\(\d+\);$/.test(statements[0]));
-
-  return { start: funcStart, end: funcEnd, isSimple, fullText: content.substring(funcStart, funcEnd) };
-}
 
 async function generateRoomScripts() {
   const changes = [];
@@ -2055,7 +1935,8 @@ async function generateRoomScripts() {
         actions: []
       };
 
-      const description = buildAscDescription(map.name, room.title || '', room.x, room.y);
+      const descFmt = (state.settings && state.settings.descriptionFormat) || '{MAP} - {TITLE} {COORDS}';
+      const description = buildAscDescription(map.name, room.title || '', room.x, room.y, descFmt);
 
       // Find adjacent rooms in the same map
       const adjacencies = {};
@@ -2169,7 +2050,7 @@ async function updateGameAgf() {
       if (room.complete || room.roomId === null) continue;
       roomEntries.push({
         roomId: room.roomId,
-        description: buildDescription(map.name, room.title || '', room.x, room.y),
+        description: buildDescription(map.name, room.title || '', room.x, room.y, (state.settings && state.settings.descriptionFormat) || '{MAP} - {TITLE} {COORDS}'),
         mapName: map.name,
         coord: coordDisplay(room.x, room.y)
       });
@@ -2264,12 +2145,6 @@ async function updateGameAgf() {
 }
 
 // ── Background Image Export ──
-function sanitizeFilename(title) {
-  let sanitized = title.replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
-  if (sanitized.length > 50) sanitized = sanitized.substring(0, 50);
-  return sanitized;
-}
-
 async function exportBackgroundImages() {
   const changes = [];
 
@@ -2415,18 +2290,9 @@ $btnGenerate.addEventListener('click', async () => {
   }
 
   // ── Compute room-level status ──
-  // A room is "new" only if a new .asc file was created; otherwise "update" if anything changed, else "skip"
-  function roomOverallType(entry) {
-    const isNewFile = entry.changes.some(c => c.detail === 'Created new .asc file');
-    if (isNewFile) return 'new';
-    const types = entry.changes.map(c => c.type);
-    if (types.includes('new') || types.includes('update')) return 'update';
-    return 'skip';
-  }
-
   let newCount = 0, updateCount = 0, skipCount = 0;
   for (const [, entry] of roomResults) {
-    const t = roomOverallType(entry);
+    const t = roomOverallType(entry.changes);
     if (t === 'new') newCount++;
     else if (t === 'update') updateCount++;
     else skipCount++;
@@ -2445,7 +2311,7 @@ $btnGenerate.addEventListener('click', async () => {
 
     let html = '';
     for (const [, entry] of roomResults) {
-      const overallType = roomOverallType(entry);
+      const overallType = roomOverallType(entry.changes);
 
       html += `<div style="padding:8px;border-bottom:1px solid #0f3460;font-size:13px;">` +
         `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">` +
@@ -2490,7 +2356,6 @@ $btnGenerate.addEventListener('click', async () => {
 //  Project Selection Overlay
 // ══════════════════════════════════════
 let projectPath = null;
-const { invoke } = window.__TAURI__.core;
 
 const $projectOverlay = document.getElementById('project-overlay');
 const $projectError = document.getElementById('project-error');
