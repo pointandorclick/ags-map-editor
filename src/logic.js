@@ -31,7 +31,7 @@ export function makeRoom(x, y) {
 }
 
 export function generateId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 }
 
 export function buildDescription(mapName, roomTitle, x, y, format) {

@@ -2872,6 +2872,10 @@ document.addEventListener('contextmenu', () => {
 window.addEventListener('blur', () => {
   if (roomDrag) cancelRoomDrag();
 });
+
+// Prevent stray file drops from navigating away
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => e.preventDefault());
 </script>
 </body>
 </html>

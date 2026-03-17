@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.2.4
+- fix: re-instate drag and drop of backgrounds
+
 ## v1.2.3
 - fix: false-positive .crm warning and list affected rooms
 - fix: template file copy — always force overwrite, reset on roomId change, and fix new room detection
