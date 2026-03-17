@@ -1892,6 +1892,11 @@ document.getElementById('btn-edit-save').addEventListener('click', () => {
     updates.lastAppliedTemplateId = null;
   }
 
+  // Room ID changed — reset so template files are copied for the new ID
+  if (updates.roomId !== room.roomId) {
+    updates.lastAppliedTemplateId = null;
+  }
+
   updateRoom(x, y, updates);
   closeEditPanel();
   renderGrid();
@@ -2134,12 +2139,11 @@ async function copyTemplateFiles() {
       const sourceRoomId = resolveTemplateSourceRoomId(state, room.templateId);
       if (sourceRoomId === null) continue;
 
-      const force = room.lastAppliedTemplateId !== null;
       const copyResults = await invoke('copy_all_room_files', {
         projectPath,
         sourceRoomId,
         targetRoomId: room.roomId,
-        force
+        force: true
       });
 
       const roomResult = {
@@ -2156,7 +2160,10 @@ async function copyTemplateFiles() {
       };
       results.push(roomResult);
 
-      room.lastAppliedTemplateId = room.templateId;
+      // Only mark template as applied if files were actually copied
+      if (copyResults.length > 0) {
+        room.lastAppliedTemplateId = room.templateId;
+      }
     }
   }
 

@@ -97,8 +97,8 @@ export function sanitizeFilename(title) {
 }
 
 export function roomOverallType(changes) {
-  const isNewFile = changes.some((c) => c.detail === 'Created new .asc file');
-  if (isNewFile) return 'new';
+  const isNewRoom = changes.some((c) => c.detail.startsWith('Assigned Room ID'));
+  if (isNewRoom) return 'new';
   const types = changes.map((c) => c.type);
   if (types.includes('new') || types.includes('update')) return 'update';
   return 'skip';

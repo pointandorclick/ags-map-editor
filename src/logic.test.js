@@ -234,8 +234,17 @@ describe('sanitizeFilename', () => {
 
 // ─── roomOverallType ────────────────────────────────────
 describe('roomOverallType', () => {
-  it('returns "new" when .asc file was created', () => {
-    const changes = [{ type: 'new', detail: 'Created new .asc file' }];
+  it('returns "new" when room ID was assigned', () => {
+    const changes = [{ type: 'new', detail: 'Assigned Room ID 34' }];
+    expect(roomOverallType(changes)).toBe('new');
+  });
+
+  it('returns "new" when room ID assigned with template copies', () => {
+    const changes = [
+      { type: 'new', detail: 'Assigned Room ID 34' },
+      { type: 'new', detail: 'Template: copied:room34.crm' },
+      { type: 'update', detail: 'Updated description comment' }
+    ];
     expect(roomOverallType(changes)).toBe('new');
   });
 
@@ -261,9 +270,9 @@ describe('roomOverallType', () => {
     expect(roomOverallType([])).toBe('skip');
   });
 
-  it('"new" file takes precedence over updates', () => {
+  it('"new" room ID takes precedence over updates', () => {
     const changes = [
-      { type: 'new', detail: 'Created new .asc file' },
+      { type: 'new', detail: 'Assigned Room ID 10' },
       { type: 'update', detail: 'Updated description' }
     ];
     expect(roomOverallType(changes)).toBe('new');
