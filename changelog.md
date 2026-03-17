@@ -1,7 +1,12 @@
 # Changelog
 
+## v1.2.3
+- fix: false-positive .crm warning and list affected rooms
+- fix: template file copy — always force overwrite, reset on roomId change, and fix new room detection
+- fix: save base room and base room allocation process
+
 ## v1.2.2
-- feat: Use a room template provided by the user to create future rooms.
+- feat: Use a base room, provided by the user, to create future rooms.
 
 ## v1.1.1
 - fix: dynamically scan project for room IDs and assign new IDs on generate
@@ -21,4 +26,3 @@
 ## v1.0.0
 
 - Initial release
-
