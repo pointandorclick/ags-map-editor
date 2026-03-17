@@ -2653,19 +2653,18 @@ $btnGenerate.addEventListener('click', async () => {
   const $warnings = document.getElementById('generate-warnings');
   const warningMessages = [];
 
-  // Check for .crm-related skips
-  let hasCrmSkips = false;
+  // Check for .crm-related failures (not benign "already exists" skips)
+  const crmFailRooms = [];
   for (const [, entry] of roomResults) {
     for (const c of entry.changes) {
-      if (c.type === 'skip' && (c.detail.includes('.crm') || c.detail.includes('CRM'))) {
-        hasCrmSkips = true;
+      if (c.type === 'skip' && (c.detail.includes('.crm') || c.detail.includes('CRM')) && !c.detail.includes('already exists')) {
+        crmFailRooms.push(`Room ${entry.roomId} (${entry.title})`);
         break;
       }
     }
-    if (hasCrmSkips) break;
   }
-  if (hasCrmSkips) {
-    warningMessages.push('Some rooms could not have events registered in their .crm files. Build these rooms in AGS Editor first, then re-generate.');
+  if (crmFailRooms.length > 0) {
+    warningMessages.push(`These rooms could not have events registered in their .crm files. Build them in AGS Editor first, then re-generate:<br>${crmFailRooms.join(', ')}`);
   }
   if (!state.settings.baseRoom) {
     warningMessages.push('No base room is configured. New rooms will not have .crm files created automatically. Set a base room in Settings.');
