@@ -1,10 +1,19 @@
 use std::fs;
 use std::path::Path;
+use std::time::Duration;
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
+
+/// Validate that a filename does not contain path traversal sequences or separators.
+fn validate_filename(name: &str) -> Result<(), String> {
+    if name.contains("..") || name.contains('/') || name.contains('\\') || name.is_empty() {
+        return Err(format!("Invalid filename: {}", name));
+    }
+    Ok(())
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 struct RecentProject {
@@ -19,7 +28,8 @@ async fn pick_project_folder(app_handle: AppHandle) -> Result<String, String> {
         let _ = tx.send(folder);
     });
 
-    let folder = rx.recv().map_err(|e| e.to_string())?;
+    let folder = rx.recv_timeout(Duration::from_secs(600))
+        .map_err(|_| "Folder selection timed out".to_string())?;
 
     match folder {
         Some(file_path) => {
@@ -80,7 +90,10 @@ fn add_recent_project(app_handle: AppHandle, path: String, name: String) -> Resu
 
     let mut projects: Vec<RecentProject> = if recent_file.exists() {
         let contents = fs::read_to_string(&recent_file).map_err(|e| e.to_string())?;
-        serde_json::from_str(&contents).unwrap_or_default()
+        serde_json::from_str(&contents).unwrap_or_else(|_| {
+            eprintln!("Warning: recent_projects.json was corrupted, resetting list");
+            vec![]
+        })
     } else {
         vec![]
     };
@@ -168,6 +181,7 @@ fn export_background_image(
     filename: String,
     base64_data: String,
 ) -> Result<(), String> {
+    validate_filename(&filename)?;
     let bg_dir = Path::new(&project_path).join("Backgrounds");
     fs::create_dir_all(&bg_dir).map_err(|e| e.to_string())?;
 
@@ -310,8 +324,11 @@ fn find_main_block(data: &[u8]) -> Result<(usize, usize), String> {
 }
 
 /// Read a little-endian u32 at the given offset.
-fn read_u32(data: &[u8], pos: usize) -> u32 {
-    u32::from_le_bytes(data[pos..pos + 4].try_into().unwrap())
+fn read_u32(data: &[u8], pos: usize) -> Result<u32, String> {
+    let bytes: [u8; 4] = data.get(pos..pos + 4)
+        .and_then(|s| s.try_into().ok())
+        .ok_or_else(|| format!("Truncated data at offset {}", pos))?;
+    Ok(u32::from_le_bytes(bytes))
 }
 
 /// Parse null-terminated event handler strings from the data.
@@ -368,9 +385,9 @@ fn update_crm_room_events(
     let search_end = main_end.min(data.len());
     let mut scan = main_start;
     while scan + 12 <= search_end {
-        let legacy_vars = read_u32(&data, scan);
-        let region_count = read_u32(&data, scan + 4);
-        let evt_count = read_u32(&data, scan + 8) as usize;
+        let legacy_vars = read_u32(&data, scan)?;
+        let region_count = read_u32(&data, scan + 4)?;
+        let evt_count = read_u32(&data, scan + 8)? as usize;
 
         if legacy_vars == 0 && region_count == 16 && (5..=15).contains(&evt_count) {
             // Candidate found — try parsing the event strings
@@ -449,8 +466,10 @@ fn update_crm_room_events(
         } else {
             let len_offset = 3;
             let old_len = i32::from_le_bytes(new_data[len_offset..len_offset + 4].try_into().unwrap());
-            let new_len = old_len + size_diff as i32;
-            new_data[len_offset..len_offset + 4].copy_from_slice(&new_len.to_le_bytes());
+            let new_len = old_len as i64 + size_diff;
+            let new_len_i32 = i32::try_from(new_len)
+                .map_err(|_| format!("Block length {} overflows i32", new_len))?;
+            new_data[len_offset..len_offset + 4].copy_from_slice(&new_len_i32.to_le_bytes());
         }
     }
 
@@ -503,6 +522,7 @@ fn copy_room_crm(
 
 #[tauri::command]
 fn save_base_room(project_path: String, template_filename: String) -> Result<(), String> {
+    validate_filename(&template_filename)?;
     let project_dir = Path::new(&project_path);
     let source = project_dir.join(&template_filename);
 
@@ -886,6 +906,45 @@ mod tests {
 
         let result = copy_all_room_files(path, 1, 2, false).unwrap();
         assert!(result.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ── validate_filename ────────────────────────────────
+
+    #[test]
+    fn validate_filename_rejects_traversal() {
+        assert!(validate_filename("../etc/passwd").is_err());
+        assert!(validate_filename("..\\windows\\system32").is_err());
+        assert!(validate_filename("foo/bar.crm").is_err());
+        assert!(validate_filename("foo\\bar.crm").is_err());
+        assert!(validate_filename("").is_err());
+    }
+
+    #[test]
+    fn validate_filename_accepts_normal_names() {
+        assert!(validate_filename("room1.crm").is_ok());
+        assert!(validate_filename("test.png").is_ok());
+        assert!(validate_filename("my-file_v2.txt").is_ok());
+    }
+
+    #[test]
+    fn export_background_rejects_path_traversal() {
+        let dir = temp_project_dir("bg_traversal");
+        let path = dir.to_string_lossy().to_string();
+        let b64 = base64::engine::general_purpose::STANDARD.encode(b"data");
+
+        let result = export_background_image(path, "../evil.png".into(), b64);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid filename"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn save_base_room_rejects_path_traversal() {
+        let dir = temp_project_dir("base_traversal");
+        let result = save_base_room(dir.to_string_lossy().to_string(), "../evil.crm".into());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid filename"));
         let _ = fs::remove_dir_all(&dir);
     }
 }

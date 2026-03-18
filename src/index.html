@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
 <title>Sierra Quest - Map Builder</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1130,6 +1131,12 @@ async function saveState() {
   }
 }
 
+let _saveTimeout = null;
+function debouncedSave() {
+  clearTimeout(_saveTimeout);
+  _saveTimeout = setTimeout(saveState, 300);
+}
+
 // ══════════════════════════════════════
 //  Map CRUD
 // ══════════════════════════════════════
@@ -1140,7 +1147,7 @@ function createMap(name) {
   state.activeMapId = id;
   // Add initial room at 0,0
   state.maps[id].rooms['0,0'] = makeRoom(0, 0);
-  saveState();
+  debouncedSave();
   return id;
 }
 
@@ -1148,7 +1155,7 @@ function deleteMap(id) {
   delete state.maps[id];
   const ids = Object.keys(state.maps);
   state.activeMapId = ids.length > 0 ? ids[0] : null;
-  saveState();
+  debouncedSave();
 }
 
 function getActiveMap() {
@@ -1214,7 +1221,7 @@ function addRoom(x, y) {
   const key = coordKey(x, y);
   if (!map.rooms[key]) {
     map.rooms[key] = makeRoom(x, y);
-    saveState();
+    debouncedSave();
   }
 }
 
@@ -1226,7 +1233,7 @@ function removeRoom(x, y) {
   if (Object.keys(map.rooms).length === 0) {
     map.rooms['0,0'] = makeRoom(0, 0);
   }
-  saveState();
+  debouncedSave();
 }
 
 function updateRoom(x, y, updates) {
@@ -1235,7 +1242,7 @@ function updateRoom(x, y, updates) {
   const key = coordKey(x, y);
   if (map.rooms[key]) {
     Object.assign(map.rooms[key], updates);
-    saveState();
+    debouncedSave();
   }
 }
 
@@ -1293,7 +1300,7 @@ function refreshMapSelect() {
 
 $mapSelect.addEventListener('change', () => {
   state.activeMapId = $mapSelect.value;
-  saveState();
+  debouncedSave();
   renderGrid();
 });
 
@@ -1305,7 +1312,7 @@ document.getElementById('btn-edit-map').addEventListener('click', () => {
   const name = prompt('Rename map:', map.name);
   if (!name || !name.trim()) return;
   map.name = name.trim();
-  saveState();
+  debouncedSave();
   refreshMapSelect();
 });
 document.getElementById('btn-delete-map').addEventListener('click', () => {
@@ -1517,6 +1524,11 @@ function renderGrid() {
           cell.classList.remove('drag-over');
           const file = e.dataTransfer.files[0];
           if (!file || !file.type.startsWith('image/')) return;
+          const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
+          if (file.size > MAX_IMAGE_SIZE) {
+            alert('Image is too large (max 10 MB).');
+            return;
+          }
           const reader = new FileReader();
           reader.onload = () => {
             updateRoom(room.x, room.y, {
@@ -1712,7 +1724,7 @@ function finishRoomDrag(clientX, clientY) {
           map.rooms[dstKey] = srcRoom;
           delete map.rooms[srcKey];
         }
-        saveState();
+        debouncedSave();
         renderGrid();
       }
     }
@@ -1794,7 +1806,7 @@ document.getElementById('ctx-mark-template').addEventListener('click', async () 
   if (!name || !name.trim()) return;
 
   markRoomAsTemplate(state, state.activeMapId, key, name.trim());
-  saveState();
+  debouncedSave();
   renderGrid();
 });
 
@@ -2004,19 +2016,25 @@ function updateDescPreview() {
 }
 
 async function populateCrmSelect(selectEl, selectedValue) {
-  const options = ['<option value="">(None \u2014 skip .crm generation)</option>'];
+  selectEl.innerHTML = '';
+  const noneOpt = document.createElement('option');
+  noneOpt.value = '';
+  noneOpt.textContent = '(None \u2014 skip .crm generation)';
+  selectEl.appendChild(noneOpt);
   if (projectPath) {
     try {
       const files = await invoke('list_crm_files', { projectPath });
       for (const f of files) {
-        const selected = (selectedValue === f) ? ' selected' : '';
-        options.push('<option value="' + f + '"' + selected + '>' + f + '</option>');
+        const opt = document.createElement('option');
+        opt.value = f;
+        opt.textContent = f;
+        if (selectedValue === f) opt.selected = true;
+        selectEl.appendChild(opt);
       }
     } catch (e) {
       console.error('Failed to list .crm files:', e);
     }
   }
-  selectEl.innerHTML = options.join('');
 }
 
 async function openSettings() {
@@ -2697,14 +2715,20 @@ $btnGenerate.addEventListener('click', async () => {
     }
   }
   if (crmFailRooms.length > 0) {
-    warningMessages.push(`These rooms could not have events registered in their .crm files. Build them in AGS Editor first, then re-generate:<br>${crmFailRooms.join(', ')}`);
+    warningMessages.push(`These rooms could not have events registered in their .crm files. Build them in AGS Editor first, then re-generate: ${crmFailRooms.join(', ')}`);
   }
   if (!state.settings.baseRoom) {
     warningMessages.push('No base room is configured. New rooms will not have .crm files created automatically. Set a base room in Settings.');
   }
 
   if (warningMessages.length > 0) {
-    $warnings.innerHTML = warningMessages.map(m => `<div style="margin-bottom:4px;">&#9888; ${m}</div>`).join('');
+    $warnings.innerHTML = '';
+    for (const m of warningMessages) {
+      const div = document.createElement('div');
+      div.style.marginBottom = '4px';
+      div.textContent = '\u26A0 ' + m;
+      $warnings.appendChild(div);
+    }
     $warnings.style.display = 'block';
   } else {
     $warnings.style.display = 'none';
@@ -2721,44 +2745,61 @@ $btnGenerate.addEventListener('click', async () => {
   } else {
     $summary.value = `Processed ${totalRooms} room${totalRooms !== 1 ? 's' : ''}: ${newCount} new, ${updateCount} updated, ${skipCount} skipped`;
 
-    let html = '';
+    $resultsList.innerHTML = '';
     for (const [, entry] of roomResults) {
       const overallType = roomOverallType(entry.changes);
 
-      html += `<div style="padding:8px;border-bottom:1px solid #0f3460;font-size:13px;">` +
-        `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">` +
-        `<span><span class="change-type ${overallType}">${overallType}</span> <strong>${entry.title}</strong> — Room ${entry.roomId} (${entry.coord})</span>` +
-        `<button class="result-complete-btn" data-map-id="${entry.mapId}" data-coord="${entry.coordKey}">Complete</button>` +
-        `</div>`;
+      const row = document.createElement('div');
+      row.style.cssText = 'padding:8px;border-bottom:1px solid #0f3460;font-size:13px;';
 
-      if (entry.changes.length > 0) {
-        html += `<ul style="margin:0;padding-left:20px;list-style:disc;">` +
-          entry.changes.map(c =>
-            `<li style="font-size:12px;color:${c.bold ? '#e0e0e0' : '#aaa'};padding:1px 0;${c.bold ? 'font-weight:600;' : ''}">` +
-            `<span class="change-type ${c.type}">${c.type}</span> ${c.detail}</li>`
-          ).join('') +
-          `</ul>`;
-      }
+      const header = document.createElement('div');
+      header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;';
 
-      html += `</div>`;
-    }
-    $resultsList.innerHTML = html;
+      const label = document.createElement('span');
+      const typeSpan = document.createElement('span');
+      typeSpan.className = `change-type ${overallType}`;
+      typeSpan.textContent = overallType;
+      const titleStrong = document.createElement('strong');
+      titleStrong.textContent = entry.title;
+      label.appendChild(typeSpan);
+      label.append(` `, titleStrong, ` — Room ${entry.roomId} (${entry.coord})`);
 
-    // Wire Complete buttons
-    $resultsList.querySelectorAll('.result-complete-btn').forEach(btn => {
+      const btn = document.createElement('button');
+      btn.className = 'result-complete-btn';
+      btn.textContent = 'Complete';
       btn.addEventListener('click', async () => {
         if (btn.classList.contains('completed')) return;
-        const mapId = btn.dataset.mapId;
-        const coord = btn.dataset.coord;
-        const map = state.maps[mapId];
-        if (!map || !map.rooms[coord]) return;
-        map.rooms[coord].complete = true;
+        const map = state.maps[entry.mapId];
+        if (!map || !map.rooms[entry.coordKey]) return;
+        map.rooms[entry.coordKey].complete = true;
         await saveState();
         renderGrid();
         btn.textContent = 'Completed';
         btn.classList.add('completed');
       });
-    });
+
+      header.appendChild(label);
+      header.appendChild(btn);
+      row.appendChild(header);
+
+      if (entry.changes.length > 0) {
+        const ul = document.createElement('ul');
+        ul.style.cssText = 'margin:0;padding-left:20px;list-style:disc;';
+        for (const c of entry.changes) {
+          const li = document.createElement('li');
+          li.style.cssText = `font-size:12px;color:${c.bold ? '#e0e0e0' : '#aaa'};padding:1px 0;${c.bold ? 'font-weight:600;' : ''}`;
+          const cTypeSpan = document.createElement('span');
+          cTypeSpan.className = `change-type ${c.type}`;
+          cTypeSpan.textContent = c.type;
+          li.appendChild(cTypeSpan);
+          li.append(` ${c.detail}`);
+          ul.appendChild(li);
+        }
+        row.appendChild(ul);
+      }
+
+      $resultsList.appendChild(row);
+    }
   }
 
   openGenerateModal();
@@ -2786,7 +2827,14 @@ async function loadRecentProjects() {
     $recentList.innerHTML = '';
     projects.forEach(project => {
       const li = document.createElement('li');
-      li.innerHTML = `<div class="project-name">${project.name}</div><div class="project-path">${project.path}</div>`;
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'project-name';
+      nameDiv.textContent = project.name;
+      const pathDiv = document.createElement('div');
+      pathDiv.className = 'project-path';
+      pathDiv.textContent = project.path;
+      li.appendChild(nameDiv);
+      li.appendChild(pathDiv);
       li.addEventListener('click', () => openRecentProject(project));
       $recentList.appendChild(li);
     });
@@ -2801,7 +2849,7 @@ async function openRecentProject(project) {
     await invoke('validate_project', { path: project.path });
     await selectProject(project.path, project.name);
   } catch (e) {
-    $projectError.textContent = e;
+    $projectError.textContent = typeof e === 'string' ? e : (e?.message || String(e));
     // Remove invalid project from the list
     const items = $recentList.querySelectorAll('li');
     items.forEach(li => {
@@ -2819,11 +2867,11 @@ document.getElementById('btn-open-project').addEventListener('click', async () =
   $projectError.textContent = '';
   try {
     const path = await invoke('pick_project_folder');
-    const name = path.split('/').pop() || path.split('\\').pop() || path;
+    const name = await invoke('validate_project', { path });
     await selectProject(path, name);
   } catch (e) {
-    if (e !== 'No folder selected') {
-      $projectError.textContent = e;
+    if (e !== 'No folder selected' && e !== 'Folder selection timed out') {
+      $projectError.textContent = typeof e === 'string' ? e : (e?.message || String(e));
     }
   }
 });
