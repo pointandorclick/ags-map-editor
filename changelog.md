@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.2.5
+- fix: right click context menu for create template more reliable
+
 ## v1.2.4
 - fix: re-instate drag and drop of backgrounds
 
