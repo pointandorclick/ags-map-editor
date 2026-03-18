@@ -1066,7 +1066,7 @@ import {
   coordKey, parseCoord, coordDisplay, makeRoom, generateId,
   buildDescription, buildAscDescription, buildLeaveFunction, parseLeaveFunction,
   sanitizeFilename, roomOverallType, ASC_DIRECTIONS, assignRoomIdsSync,
-  resolveTemplateSourceRoomId
+  resolveTemplateSourceRoomId, markRoomAsTemplate
 } from './logic.js';
 
 const { invoke } = window.__TAURI__.core;
@@ -1242,13 +1242,6 @@ function updateRoom(x, y, updates) {
 // ══════════════════════════════════════
 //  Template Management
 // ══════════════════════════════════════
-function addTemplate(name, imageDataUrl, sourceCoord, sourceMapId) {
-  const id = generateId();
-  state.templates[id] = { name, imageDataUrl, sourceCoord, sourceMapId };
-  saveState();
-  return id;
-}
-
 function getTemplates() {
   return state.templates || {};
 }
@@ -1538,7 +1531,7 @@ function renderGrid() {
 
       // Mousedown to begin potential drag or click
       cell.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return;
+        if (e.button !== 0 || e.ctrlKey) return;
         if (e.target.classList.contains('plus-btn')) return;
         if ($editPanel.style.display === 'block') return;
         e.preventDefault();
@@ -1559,6 +1552,7 @@ function renderGrid() {
       if (room.imageDataUrl) {
         cell.addEventListener('contextmenu', (e) => {
           e.preventDefault();
+          roomDrag = null;
           showContextMenu(e.clientX, e.clientY, room.x, room.y);
         });
       }
@@ -1782,24 +1776,25 @@ function hideContextMenu() {
   contextTarget = null;
 }
 
-document.addEventListener('click', hideContextMenu);
+document.addEventListener('click', (e) => {
+  if (!$contextMenu.contains(e.target)) hideContextMenu();
+});
 
-document.getElementById('ctx-mark-template').addEventListener('click', () => {
+document.getElementById('ctx-mark-template').addEventListener('click', async () => {
   if (!contextTarget) return;
+  const { x, y } = contextTarget;
+  hideContextMenu();
   const map = getActiveMap();
   if (!map) return;
-  const key = coordKey(contextTarget.x, contextTarget.y);
+  const key = coordKey(x, y);
   const room = map.rooms[key];
   if (!room || !room.imageDataUrl) return;
 
-  const name = prompt('Template name:');
+  const name = await showPromptDialog('Template name:', room.title || '');
   if (!name || !name.trim()) return;
 
-  room.isTemplate = true;
-  const templateId = addTemplate(name.trim(), room.imageDataUrl, key, state.activeMapId);
-  room.templateId = templateId;
+  markRoomAsTemplate(state, state.activeMapId, key, name.trim());
   saveState();
-  hideContextMenu();
   renderGrid();
 });
 
@@ -2535,6 +2530,44 @@ function showConfirmDialog(message) {
     dialog.appendChild(btnRow);
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
+  });
+}
+
+function showPromptDialog(message, defaultValue) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:2000;display:flex;align-items:center;justify-content:center;';
+    const dialog = document.createElement('div');
+    dialog.style.cssText = 'background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:24px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.6);';
+    const msg = document.createElement('p');
+    msg.style.cssText = 'font-size:14px;color:#e0e0e0;margin-bottom:12px;line-height:1.5;';
+    msg.textContent = message;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = defaultValue || '';
+    input.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 10px;border:1px solid #0f3460;border-radius:4px;background:#1a1a2e;color:#e0e0e0;font-size:14px;margin-bottom:16px;outline:none;';
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = 'background:#0f3460;color:#e0e0e0;border:1px solid #1a4a8a;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;';
+    const okBtn = document.createElement('button');
+    okBtn.textContent = 'OK';
+    okBtn.style.cssText = 'background:#e94560;color:#fff;border:1px solid #e94560;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;';
+    cancelBtn.addEventListener('click', () => { document.body.removeChild(overlay); resolve(null); });
+    okBtn.addEventListener('click', () => { document.body.removeChild(overlay); resolve(input.value); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { document.body.removeChild(overlay); resolve(input.value); }
+      if (e.key === 'Escape') { document.body.removeChild(overlay); resolve(null); }
+    });
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(okBtn);
+    dialog.appendChild(msg);
+    dialog.appendChild(input);
+    dialog.appendChild(btnRow);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    input.focus();
   });
 }
 

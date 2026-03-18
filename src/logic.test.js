@@ -13,7 +13,8 @@ import {
   roomOverallType,
   ASC_DIRECTIONS,
   assignRoomIdsSync,
-  resolveTemplateSourceRoomId
+  resolveTemplateSourceRoomId,
+  markRoomAsTemplate
 } from './logic.js';
 
 // ─── coordKey ───────────────────────────────────────────
@@ -461,5 +462,63 @@ describe('assignRoomIdsSync', () => {
     const assignments = assignRoomIdsSync(state, [2]);
     expect(assignments).toHaveLength(1);
     expect(assignments[0].roomId).toBe(3);
+  });
+});
+
+// ─── markRoomAsTemplate ────────────────────────────────
+describe('markRoomAsTemplate', () => {
+  function makeState(maps, templates) {
+    return { maps, activeMapId: Object.keys(maps)[0] || null, templates: templates || {}, settings: {} };
+  }
+
+  it('marks a room with an image as a template and adds to templates', () => {
+    const room = makeRoom(1, 2);
+    room.imageDataUrl = 'data:image/png;base64,abc123';
+    room.title = 'Hallway';
+    const state = makeState({ m1: { name: 'Map1', rooms: { '1,2': room } } });
+
+    const templateId = markRoomAsTemplate(state, 'm1', '1,2', 'My Template');
+
+    expect(templateId).not.toBeNull();
+    expect(room.isTemplate).toBe(true);
+    expect(room.templateId).toBe(templateId);
+    expect(state.templates[templateId]).toEqual({
+      name: 'My Template',
+      imageDataUrl: 'data:image/png;base64,abc123',
+      sourceCoord: '1,2',
+      sourceMapId: 'm1'
+    });
+  });
+
+  it('returns null when the room has no image', () => {
+    const room = makeRoom(0, 0);
+    const state = makeState({ m1: { name: 'Map1', rooms: { '0,0': room } } });
+
+    const templateId = markRoomAsTemplate(state, 'm1', '0,0', 'Empty');
+
+    expect(templateId).toBeNull();
+    expect(room.isTemplate).toBe(false);
+    expect(Object.keys(state.templates)).toHaveLength(0);
+  });
+
+  it('returns null for an invalid map ID', () => {
+    const state = makeState({ m1: { name: 'Map1', rooms: {} } });
+    expect(markRoomAsTemplate(state, 'bad-id', '0,0', 'Nope')).toBeNull();
+  });
+
+  it('returns null for a non-existent room coord', () => {
+    const state = makeState({ m1: { name: 'Map1', rooms: { '0,0': makeRoom(0, 0) } } });
+    expect(markRoomAsTemplate(state, 'm1', '5,5', 'Nope')).toBeNull();
+  });
+
+  it('initialises templates object when missing', () => {
+    const room = makeRoom(0, 0);
+    room.imageDataUrl = 'data:image/png;base64,xyz';
+    const state = { maps: { m1: { name: 'Map1', rooms: { '0,0': room } } }, activeMapId: 'm1' };
+
+    const templateId = markRoomAsTemplate(state, 'm1', '0,0', 'First');
+
+    expect(templateId).not.toBeNull();
+    expect(state.templates[templateId].name).toBe('First');
   });
 });

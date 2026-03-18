@@ -111,6 +111,29 @@ export const ASC_DIRECTIONS = [
   { name: 'Right', dx: 1, dy: 0, crmEventIndex: 1 }
 ];
 
+/**
+ * Mark a room as a template and add it to the templates collection.
+ * Returns the new template ID, or null if the room has no image.
+ */
+export function markRoomAsTemplate(state, mapId, coordKeyStr, templateName) {
+  const map = state.maps[mapId];
+  if (!map) return null;
+  const room = map.rooms[coordKeyStr];
+  if (!room || !room.imageDataUrl) return null;
+
+  const id = generateId();
+  room.isTemplate = true;
+  room.templateId = id;
+  if (!state.templates) state.templates = {};
+  state.templates[id] = {
+    name: templateName,
+    imageDataUrl: room.imageDataUrl,
+    sourceCoord: coordKeyStr,
+    sourceMapId: mapId
+  };
+  return id;
+}
+
 export function resolveTemplateSourceRoomId(state, templateId) {
   const template = state.templates[templateId];
   if (!template) return null;
