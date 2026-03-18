@@ -1,6 +1,6 @@
 {
   "productName": "AGS Map Editor",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "identifier": "com.pointandclick.ags-map-editor",
   "build": {
     "frontendDist": "../src"
