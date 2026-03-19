@@ -1266,9 +1266,7 @@ fn build_crm(bg_width: u32, bg_height: u32, bpp: u32, pixels: &[u8]) -> Vec<u8> 
     let groups = 1 + hotspot_count as usize + obj_count as usize + region_count as usize;
     for _ in 0..groups {
         crm.extend_from_slice(&7i32.to_le_bytes()); // 7 events per group
-        for _ in 0..7 {
-            crm.push(0); // empty null-terminated string
-        }
+        crm.extend_from_slice(&[0u8; 7]); // 7 empty null-terminated strings
     }
 
     // 13. Object baselines (none)
@@ -1293,7 +1291,7 @@ fn build_crm(bg_width: u32, bg_height: u32, bpp: u32, pixels: &[u8]) -> Vec<u8> 
     // 20. MessageCount = 0
     crm.extend_from_slice(&0i16.to_le_bytes());
 
-    // 21. GameID
+    // 21. GameID (0 is accepted by AGS — it only uses this for save-game validation)
     crm.extend_from_slice(&0i32.to_le_bytes());
 
     // 22-23. Messages (none)
@@ -2051,6 +2049,160 @@ mod tests {
         assert_eq!(result, "exists");
         // File unchanged
         assert_eq!(fs::read(dir.join("room1.crm")).unwrap(), b"existing");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ── update_crm_room_events on synthesized .crm ────────
+
+    #[test]
+    fn update_crm_events_on_synthesized_crm() {
+        let dir = temp_project_dir("crm_events_synth");
+        let path = dir.to_string_lossy().to_string();
+
+        // Create a synthesized .crm
+        let crm = build_crm(320, 200, 4, &[]);
+        fs::write(dir.join("room1.crm"), &crm).unwrap();
+
+        // Register room_LeaveRight at event index 1
+        let updates = vec![
+            CrmEventUpdate { index: 1, handler: "room_LeaveRight".to_string() },
+        ];
+        let changes = update_crm_room_events(path.clone(), 1, updates).unwrap();
+        assert!(changes.iter().any(|c| c.contains("Registered") && c.contains("room_LeaveRight")));
+
+        // Verify it persists: re-run should say "already registered"
+        let updates2 = vec![
+            CrmEventUpdate { index: 1, handler: "room_LeaveRight".to_string() },
+        ];
+        let changes2 = update_crm_room_events(path.clone(), 1, updates2).unwrap();
+        assert!(changes2.iter().any(|c| c.contains("already registered")));
+
+        // Verify the .crm is still parseable after patching
+        let data = fs::read(dir.join("room1.crm")).unwrap();
+        let version = u16::from_le_bytes([data[0], data[1]]);
+        let (main_start, main_len) = find_main_block(&data).unwrap();
+        let bg = find_background_in_main(&data, main_start, main_len, version).unwrap();
+        assert_eq!(bg.width, 320);
+        assert_eq!(bg.height, 200);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn update_crm_events_multiple_directions() {
+        let dir = temp_project_dir("crm_events_multi");
+        let path = dir.to_string_lossy().to_string();
+
+        let crm = build_crm(320, 200, 4, &[]);
+        fs::write(dir.join("room5.crm"), &crm).unwrap();
+
+        let updates = vec![
+            CrmEventUpdate { index: 0, handler: "room_LeaveLeft".to_string() },
+            CrmEventUpdate { index: 1, handler: "room_LeaveRight".to_string() },
+            CrmEventUpdate { index: 2, handler: "room_LeaveBottom".to_string() },
+            CrmEventUpdate { index: 3, handler: "room_LeaveTop".to_string() },
+        ];
+        let changes = update_crm_room_events(path.clone(), 5, updates).unwrap();
+        assert_eq!(changes.len(), 4);
+        assert!(changes.iter().all(|c| c.contains("Registered")));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn update_crm_events_missing_crm_returns_error() {
+        let dir = temp_project_dir("crm_events_missing");
+        let path = dir.to_string_lossy().to_string();
+
+        let updates = vec![
+            CrmEventUpdate { index: 1, handler: "room_LeaveRight".to_string() },
+        ];
+        let result = update_crm_room_events(path, 99, updates);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ── LZSS edge cases ───────────────────────────────────
+
+    #[test]
+    fn lzss_roundtrip_empty_input() {
+        let compressed = lzss_compress(&[]);
+        assert!(compressed.is_empty());
+    }
+
+    #[test]
+    fn lzss_roundtrip_exactly_threshold_bytes() {
+        let data = [0xAA, 0xBB, 0xCC]; // exactly LZSS_THRESHOLD
+        let compressed = lzss_compress(&data);
+        let decompressed = lzss_expand(&compressed, data.len()).unwrap();
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn lzss_roundtrip_exactly_lookahead_bytes() {
+        let data: Vec<u8> = (0..LZSS_F as u8).collect(); // exactly 16 bytes
+        let compressed = lzss_compress(&data);
+        let decompressed = lzss_expand(&compressed, data.len()).unwrap();
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn lzss_roundtrip_ring_buffer_wrap() {
+        // Data larger than ring buffer (N=4096) with repeating patterns
+        let pattern = b"ABCDEFGH";
+        let mut data = Vec::with_capacity(8192);
+        while data.len() < 8192 {
+            data.extend_from_slice(pattern);
+        }
+        let compressed = lzss_compress(&data);
+        assert!(compressed.len() < data.len(), "should compress repeating data");
+        let decompressed = lzss_expand(&compressed, data.len()).unwrap();
+        assert_eq!(decompressed, data);
+    }
+
+    // ── build_crm → embed_image_in_crm round-trip ────────
+
+    #[test]
+    fn build_crm_then_embed_roundtrip() {
+        let dir = temp_project_dir("build_then_embed");
+        let path = dir.to_string_lossy().to_string();
+
+        // Synthesize a 320x200 black .crm
+        let crm = build_crm(320, 200, 4, &[]);
+        fs::write(dir.join("room1.crm"), &crm).unwrap();
+
+        // Create a coloured 320x200 PNG and embed it
+        let mut img = image::RgbaImage::new(320, 200);
+        for (x, y, pixel) in img.enumerate_pixels_mut() {
+            *pixel = image::Rgba([(x & 0xFF) as u8, (y & 0xFF) as u8, 200, 255]);
+        }
+        let mut png_bytes = Vec::new();
+        let encoder = image::codecs::png::PngEncoder::new(&mut png_bytes);
+        image::ImageEncoder::write_image(
+            encoder, img.as_raw(), 320, 200, image::ExtendedColorType::Rgba8,
+        ).unwrap();
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+
+        let result = embed_image_in_crm(path.clone(), 1, b64).unwrap();
+        assert!(result.contains("320x200"));
+
+        // Verify the modified file is still parseable
+        let data = fs::read(dir.join("room1.crm")).unwrap();
+        let version = u16::from_le_bytes([data[0], data[1]]);
+        let (main_start, main_len) = find_main_block(&data).unwrap();
+        let bg = find_background_in_main(&data, main_start, main_len, version).unwrap();
+        assert_eq!(bg.width, 320);
+        assert_eq!(bg.height, 200);
+
+        // Now update CRM events — ensure everything still works together
+        let updates = vec![
+            CrmEventUpdate { index: 0, handler: "room_LeaveLeft".to_string() },
+        ];
+        let changes = update_crm_room_events(path, 1, updates).unwrap();
+        assert!(changes.iter().any(|c| c.contains("Registered")));
 
         let _ = fs::remove_dir_all(&dir);
     }
