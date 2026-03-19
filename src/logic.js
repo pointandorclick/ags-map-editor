@@ -100,6 +100,7 @@ export function roomOverallType(changes) {
   const isNewRoom = changes.some((c) => c.detail.startsWith('Assigned Room ID'));
   if (isNewRoom) return 'new';
   const types = changes.map((c) => c.type);
+  if (types.includes('error')) return 'error';
   if (types.includes('new') || types.includes('update')) return 'update';
   return 'skip';
 }

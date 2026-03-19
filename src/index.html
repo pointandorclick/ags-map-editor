@@ -618,6 +618,11 @@ body {
   color: #9e9e9e;
 }
 
+.change-type.error {
+  background: rgba(233,69,96,0.25);
+  color: #e94560;
+}
+
 /* ── Per-room Complete button in results ── */
 .result-complete-btn {
   background: #0f3460;
@@ -2173,8 +2178,9 @@ async function copyTemplateFiles() {
       };
       results.push(roomResult);
 
-      // Only mark template as applied if files were actually copied
-      if (copyResults.length > 0) {
+      // Only mark template as applied if a .crm was actually copied
+      const crmCopied = copyResults.some(r => r.startsWith('copied:') && r.endsWith('.crm'));
+      if (crmCopied) {
         room.lastAppliedTemplateId = room.templateId;
       }
     }
@@ -2523,6 +2529,58 @@ async function copyBaseRoomFiles() {
   return changes;
 }
 
+// ── Embed Background Images into .crm Files ──
+async function embedBackgroundImages() {
+  const changes = [];
+
+  for (const mapId of Object.keys(state.maps)) {
+    const map = state.maps[mapId];
+    for (const key of Object.keys(map.rooms)) {
+      const room = map.rooms[key];
+      if (room.complete) continue;
+      if (!room.imageDataUrl || room.roomId === null) continue;
+      // Template rooms have their .crm copied as-is from the template — don't embed
+      if (room.templateId) continue;
+
+      const sanitizedTitle = sanitizeFilename(room.title || '');
+      const bgFilename = `Room${room.roomId}${sanitizedTitle ? '_' + sanitizedTitle : ''}.png`;
+
+      // Strip data URL prefix (e.g. "data:image/png;base64,")
+      const commaIndex = room.imageDataUrl.indexOf(',');
+      if (commaIndex === -1) {
+        changes.push({ roomId: room.roomId, type: 'error', detail: `Room ${room.roomId}: Invalid image data URL` });
+        continue;
+      }
+      const base64Data = room.imageDataUrl.substring(commaIndex + 1);
+
+      try {
+        const result = await invoke('embed_image_in_crm', {
+          projectPath, roomId: room.roomId, base64ImageData: base64Data
+        });
+        changes.push({ roomId: room.roomId, type: 'new', detail: result, bold: true });
+
+        // Delete the separate background file from Backgrounds/ since it's now embedded
+        try {
+          await invoke('delete_background_image', { projectPath, filename: bgFilename });
+        } catch (delErr) {
+          console.warn(`Could not delete Backgrounds/${bgFilename}:`, delErr);
+        }
+      } catch (e) {
+        const msg = String(e);
+        if (msg.includes('not found')) {
+          changes.push({ roomId: room.roomId, type: 'skip', detail: `room${room.roomId}.crm not found — cannot embed background` });
+        } else if (msg.includes('dimensions')) {
+          changes.push({ roomId: room.roomId, type: 'error', detail: msg });
+        } else {
+          changes.push({ roomId: room.roomId, type: 'error', detail: `Embed background failed: ${msg}` });
+        }
+      }
+    }
+  }
+
+  return changes;
+}
+
 function showConfirmDialog(message) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
@@ -2620,6 +2678,9 @@ $btnGenerate.addEventListener('click', async () => {
   // Step 6: Copy base room .crm for new rooms
   const crmChanges = await copyBaseRoomFiles();
 
+  // Step 7: Embed background images into .crm files
+  const embedChanges = await embedBackgroundImages();
+
   $btnGenerate.disabled = false;
   updateGenerateButtonState();
 
@@ -2691,12 +2752,19 @@ $btnGenerate.addEventListener('click', async () => {
     if (entry) entry.changes.push(cc);
   }
 
+  // Merge embed background results
+  for (const ec of embedChanges) {
+    const entry = roomResults.get(ec.roomId);
+    if (entry) entry.changes.push(ec);
+  }
+
   // ── Compute room-level status ──
-  let newCount = 0, updateCount = 0, skipCount = 0;
+  let newCount = 0, updateCount = 0, skipCount = 0, errorCount = 0;
   for (const [, entry] of roomResults) {
     const t = roomOverallType(entry.changes);
     if (t === 'new') newCount++;
     else if (t === 'update') updateCount++;
+    else if (t === 'error') errorCount++;
     else skipCount++;
   }
 
@@ -2708,7 +2776,7 @@ $btnGenerate.addEventListener('click', async () => {
   const crmFailRooms = [];
   for (const [, entry] of roomResults) {
     for (const c of entry.changes) {
-      if (c.type === 'skip' && (c.detail.includes('.crm') || c.detail.includes('CRM')) && !c.detail.includes('already exists')) {
+      if (c.type === 'skip' && (c.detail.includes('.crm event update failed') || (c.detail.includes('.crm not found') && c.detail.includes('register events')))) {
         crmFailRooms.push(`Room ${entry.roomId} (${entry.title})`);
         break;
       }
@@ -2743,7 +2811,7 @@ $btnGenerate.addEventListener('click', async () => {
     $summary.value = 'No rooms to process. Add rooms with IDs first.';
     $resultsList.innerHTML = '';
   } else {
-    $summary.value = `Processed ${totalRooms} room${totalRooms !== 1 ? 's' : ''}: ${newCount} new, ${updateCount} updated, ${skipCount} skipped`;
+    $summary.value = `Processed ${totalRooms} room${totalRooms !== 1 ? 's' : ''}: ${newCount} new, ${updateCount} updated, ${skipCount} skipped${errorCount > 0 ? ', ' + errorCount + ' error' + (errorCount !== 1 ? 's' : '') : ''}`;
 
     $resultsList.innerHTML = '';
     for (const [, entry] of roomResults) {
