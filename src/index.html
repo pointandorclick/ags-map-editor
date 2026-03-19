@@ -10,8 +10,8 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #1a1a2e;
-  color: #e0e0e0;
+  background: #171b21;
+  color: #e6edf3;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -26,8 +26,8 @@ body {
   justify-content: flex-end;
   gap: 8px;
   padding: 8px 12px;
-  background: #16213e;
-  border-bottom: 1px solid #0f3460;
+  background: #1e2329;
+  border-bottom: 1px solid #2d333b;
   flex-shrink: 0;
   flex-wrap: wrap;
 }
@@ -41,14 +41,14 @@ body {
 #toolbar .separator {
   width: 1px;
   height: 24px;
-  background: #0f3460;
+  background: #2d333b;
   margin: 0 4px;
 }
 
 #toolbar select {
-  background: #1a1a2e;
-  color: #e0e0e0;
-  border: 1px solid #0f3460;
+  background: #171b21;
+  color: #e6edf3;
+  border: 1px solid #2d333b;
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 13px;
@@ -56,9 +56,9 @@ body {
 }
 
 #toolbar button {
-  background: #0f3460;
-  color: #e0e0e0;
-  border: 1px solid #1a4a8a;
+  background: #2d333b;
+  color: #e6edf3;
+  border: 1px solid #3d444d;
   padding: 4px 10px;
   border-radius: 4px;
   font-size: 13px;
@@ -66,11 +66,11 @@ body {
   white-space: nowrap;
 }
 
-#toolbar button:hover { background: #1a4a8a; }
+#toolbar button:hover { background: #3d444d; }
 
 #toolbar button.active {
-  background: #e94560;
-  border-color: #e94560;
+  background: #ee55aa;
+  border-color: #ee55aa;
 }
 
 #toolbar .mode-toggle {
@@ -104,7 +104,7 @@ body {
   flex: 1;
   overflow: auto;
   position: relative;
-  background: #12121f;
+  background: #13171d;
 }
 
 #grid-container {
@@ -126,7 +126,7 @@ body {
   overflow: hidden;
   position: relative;
   border: 2px dashed #333;
-  background: #1e1e30;
+  background: #22272e;
 }
 
 .room-cell.has-image .room-cell-inner {
@@ -134,7 +134,7 @@ body {
 }
 
 .room-cell.is-template .room-cell-inner {
-  border: 2px solid #e94560;
+  border: 2px solid #ee55aa;
 }
 
 /* ── Complete badge ── */
@@ -144,7 +144,7 @@ body {
   right: 4px;
   width: 20px;
   height: 20px;
-  background: #2ecc40;
+  background: #3fb950;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -171,7 +171,7 @@ body {
   align-items: center;
   gap: 3px;
   background: rgba(0, 0, 0, 0.7);
-  color: #e94560;
+  color: #ee55aa;
   font-size: 10px;
   font-weight: 600;
   padding: 2px 6px 2px 4px;
@@ -185,7 +185,7 @@ body {
 .template-badge svg {
   width: 12px;
   height: 12px;
-  fill: #e94560;
+  fill: #ee55aa;
   flex-shrink: 0;
 }
 
@@ -199,8 +199,8 @@ body {
 }
 
 .room-cell.drag-over .room-cell-inner {
-  border-color: #4fc3f7;
-  background: #1a2a4e;
+  border-color: #f588c2;
+  background: #1c2633;
 }
 
 /* ── Coordinate label ── */
@@ -241,9 +241,9 @@ body {
   position: absolute;
   width: 28px;
   height: 28px;
-  background: #0f3460;
-  color: #e0e0e0;
-  border: 1px solid #1a4a8a;
+  background: #2d333b;
+  color: #e6edf3;
+  border: 1px solid #3d444d;
   border-radius: 50%;
   font-size: 18px;
   line-height: 26px;
@@ -259,7 +259,7 @@ body {
 
 .room-cell:hover .plus-btn { opacity: 1; }
 
-.plus-btn:hover { background: #1a4a8a; }
+.plus-btn:hover { background: #3d444d; }
 
 .plus-btn.top    { top: -36px;  left: 50%; transform: translateX(-50%); }
 .plus-btn.bottom { bottom: -36px; left: 50%; transform: translateX(-50%); }
@@ -269,8 +269,8 @@ body {
 /* ── Context menu ── */
 #context-menu {
   position: fixed;
-  background: #16213e;
-  border: 1px solid #0f3460;
+  background: #1e2329;
+  border: 1px solid #2d333b;
   border-radius: 4px;
   padding: 4px 0;
   z-index: 1000;
@@ -286,7 +286,7 @@ body {
 }
 
 #context-menu .menu-item:hover {
-  background: #0f3460;
+  background: #2d333b;
 }
 
 /* ── Edit Panel ── */
@@ -295,8 +295,8 @@ body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: #16213e;
-  border: 1px solid #0f3460;
+  background: #1e2329;
+  border: 1px solid #2d333b;
   border-radius: 8px;
   padding: 20px;
   z-index: 500;
@@ -308,7 +308,7 @@ body {
 #edit-panel h3 {
   margin-bottom: 12px;
   font-size: 15px;
-  color: #4fc3f7;
+  color: #f588c2;
 }
 
 #edit-panel label {
@@ -323,9 +323,9 @@ body {
 #edit-panel textarea,
 #edit-panel select {
   width: 100%;
-  background: #1a1a2e;
-  color: #e0e0e0;
-  border: 1px solid #0f3460;
+  background: #171b21;
+  color: #e6edf3;
+  border: 1px solid #2d333b;
   padding: 6px 8px;
   border-radius: 4px;
   font-size: 13px;
@@ -345,30 +345,30 @@ body {
 }
 
 #edit-panel .btn-row button {
-  background: #0f3460;
-  color: #e0e0e0;
-  border: 1px solid #1a4a8a;
+  background: #2d333b;
+  color: #e6edf3;
+  border: 1px solid #3d444d;
   padding: 6px 14px;
   border-radius: 4px;
   font-size: 13px;
   cursor: pointer;
 }
 
-#edit-panel .btn-row button:hover { background: #1a4a8a; }
+#edit-panel .btn-row button:hover { background: #3d444d; }
 
 #edit-panel .btn-row button.save {
-  background: #2e7d32;
-  border-color: #388e3c;
+  background: #2ea043;
+  border-color: #3fb950;
 }
 
-#edit-panel .btn-row button.save:hover { background: #388e3c; }
+#edit-panel .btn-row button.save:hover { background: #3fb950; }
 
 #edit-panel .btn-row button.danger {
-  background: #b71c1c;
-  border-color: #c62828;
+  background: #c93c37;
+  border-color: #d94843;
 }
 
-#edit-panel .btn-row button.danger:hover { background: #c62828; }
+#edit-panel .btn-row button.danger:hover { background: #d94843; }
 
 /* ── Display Modal ── */
 #room-modal-overlay {
@@ -386,8 +386,8 @@ body {
 }
 
 #room-modal {
-  background: #16213e;
-  border: 1px solid #0f3460;
+  background: #1e2329;
+  border: 1px solid #2d333b;
   border-radius: 8px;
   padding: 24px;
   max-width: 600px;
@@ -407,7 +407,7 @@ body {
 #room-modal h2 {
   font-size: 18px;
   margin-bottom: 8px;
-  color: #4fc3f7;
+  color: #f588c2;
 }
 
 #room-modal .meta {
@@ -424,7 +424,7 @@ body {
   font-size: 13px;
   color: #ccc;
   white-space: pre-wrap;
-  background: #1a1a2e;
+  background: #171b21;
   padding: 10px;
   border-radius: 4px;
   margin-top: 8px;
@@ -435,16 +435,16 @@ body {
 #room-modal .close-btn {
   display: block;
   margin: 16px auto 0;
-  background: #0f3460;
-  color: #e0e0e0;
-  border: 1px solid #1a4a8a;
+  background: #2d333b;
+  color: #e6edf3;
+  border: 1px solid #3d444d;
   padding: 6px 20px;
   border-radius: 4px;
   font-size: 13px;
   cursor: pointer;
 }
 
-#room-modal .close-btn:hover { background: #1a4a8a; }
+#room-modal .close-btn:hover { background: #3d444d; }
 
 /* ── Overlay backdrop for edit panel ── */
 .overlay-backdrop {
@@ -459,7 +459,7 @@ body {
 #project-overlay {
   position: fixed;
   inset: 0;
-  background: #1a1a2e;
+  background: #171b21;
   z-index: 2000;
   display: flex;
   align-items: center;
@@ -474,13 +474,13 @@ body {
 
 #project-overlay h1 {
   font-size: 28px;
-  color: #e0e0e0;
+  color: #e6edf3;
   margin-bottom: 32px;
   font-weight: 600;
 }
 
 #project-overlay .open-btn {
-  background: #e94560;
+  background: #ee55aa;
   color: #fff;
   border: none;
   padding: 12px 28px;
@@ -491,11 +491,11 @@ body {
 }
 
 #project-overlay .open-btn:hover {
-  background: #d63a55;
+  background: #d94999;
 }
 
 #project-overlay .error-msg {
-  color: #e94560;
+  color: #ee55aa;
   font-size: 13px;
   margin-top: 12px;
   min-height: 20px;
@@ -528,13 +528,13 @@ body {
 }
 
 #project-overlay .recent-list li:hover {
-  background: #16213e;
-  border-color: #0f3460;
+  background: #1e2329;
+  border-color: #2d333b;
 }
 
 #project-overlay .recent-list .project-name {
   font-size: 14px;
-  color: #e0e0e0;
+  color: #e6edf3;
 }
 
 #project-overlay .recent-list .project-path {
@@ -547,31 +547,31 @@ body {
 }
 
 #project-overlay .warning-notice {
-  background: #2a2a1e;
-  border: 1px solid #8a7a2a;
+  background: #272318;
+  border: 1px solid #7a6e2a;
   border-radius: 6px;
   padding: 12px 16px;
   margin-bottom: 24px;
   font-size: 13px;
-  color: #d4c96a;
+  color: #c9b458;
   line-height: 1.5;
   text-align: left;
 }
 
 /* ── Generate Button ── */
 #btn-generate {
-  background: #2e7d32;
-  border-color: #388e3c;
+  background: #2ea043;
+  border-color: #3fb950;
   color: #fff;
   font-weight: 500;
 }
 
-#btn-generate:hover { background: #388e3c; }
+#btn-generate:hover { background: #3fb950; }
 #btn-generate:active { background: #1b5e20; }
 
 #btn-generate:disabled {
-  background: #1a3a1c;
-  border-color: #2a4a2c;
+  background: #1e2a1f;
+  border-color: #2d3a2e;
   color: #667;
   cursor: not-allowed;
 }
@@ -592,8 +592,8 @@ body {
 }
 
 #generate-modal {
-  background: #16213e;
-  border: 1px solid #0f3460;
+  background: #1e2329;
+  border: 1px solid #2d333b;
   border-radius: 8px;
   padding: 24px;
   max-width: 640px;
@@ -607,15 +607,15 @@ body {
 #generate-modal h2 {
   font-size: 18px;
   margin-bottom: 12px;
-  color: #4fc3f7;
+  color: #f588c2;
   flex-shrink: 0;
 }
 
 #generate-summary {
   width: 100%;
-  background: #1a1a2e;
-  color: #e0e0e0;
-  border: 1px solid #0f3460;
+  background: #171b21;
+  color: #e6edf3;
+  border: 1px solid #2d333b;
   padding: 8px 10px;
   border-radius: 4px;
   font-size: 13px;
@@ -660,26 +660,26 @@ body {
 }
 
 .change-type.error {
-  background: rgba(233,69,96,0.25);
-  color: #e94560;
+  background: rgba(238,85,170,0.2);
+  color: #ee55aa;
 }
 
 /* ── Per-room Complete button in results ── */
 .result-complete-btn {
-  background: #0f3460;
-  color: #e0e0e0;
-  border: 1px solid #1a4a8a;
+  background: #2d333b;
+  color: #e6edf3;
+  border: 1px solid #3d444d;
   padding: 4px 12px;
   border-radius: 4px;
   font-size: 12px;
   cursor: pointer;
 }
 
-.result-complete-btn:hover { background: #1a4a8a; }
+.result-complete-btn:hover { background: #3d444d; }
 
 .result-complete-btn.completed {
-  background: #2e7d32;
-  border-color: #388e3c;
+  background: #2ea043;
+  border-color: #3fb950;
   color: #fff;
   cursor: default;
 }
@@ -687,9 +687,9 @@ body {
 #generate-modal .close-btn {
   display: block;
   margin: 0 auto;
-  background: #0f3460;
-  color: #e0e0e0;
-  border: 1px solid #1a4a8a;
+  background: #2d333b;
+  color: #e6edf3;
+  border: 1px solid #3d444d;
   padding: 6px 20px;
   border-radius: 4px;
   font-size: 13px;
@@ -697,7 +697,7 @@ body {
   flex-shrink: 0;
 }
 
-#generate-modal .close-btn:hover { background: #1a4a8a; }
+#generate-modal .close-btn:hover { background: #3d444d; }
 
 /* ── Settings Modal ── */
 #settings-overlay {
@@ -715,8 +715,8 @@ body {
 }
 
 #settings-modal {
-  background: #16213e;
-  border: 1px solid #0f3460;
+  background: #1e2329;
+  border: 1px solid #2d333b;
   border-radius: 8px;
   padding: 24px;
   max-width: 500px;
@@ -727,7 +727,7 @@ body {
 #settings-modal h2 {
   font-size: 18px;
   margin-bottom: 12px;
-  color: #4fc3f7;
+  color: #f588c2;
 }
 
 #settings-modal label {
@@ -739,9 +739,9 @@ body {
 
 #settings-modal input[type="text"] {
   width: 100%;
-  background: #1a1a2e;
-  color: #e0e0e0;
-  border: 1px solid #0f3460;
+  background: #171b21;
+  color: #e6edf3;
+  border: 1px solid #2d333b;
   padding: 6px 8px;
   border-radius: 4px;
   font-size: 13px;
@@ -751,9 +751,9 @@ body {
 
 #settings-modal select {
   width: 100%;
-  background: #1a1a2e;
-  color: #e0e0e0;
-  border: 1px solid #0f3460;
+  background: #171b21;
+  color: #e6edf3;
+  border: 1px solid #2d333b;
   padding: 6px 8px;
   border-radius: 4px;
   font-size: 13px;
@@ -769,7 +769,7 @@ body {
 
 #settings-modal .preview-area {
   margin-top: 12px;
-  background: #1a1a2e;
+  background: #171b21;
   padding: 8px 10px;
   border-radius: 4px;
   font-size: 13px;
@@ -781,7 +781,7 @@ body {
 }
 
 #settings-modal #settings-desc-preview {
-  color: #e0e0e0;
+  color: #e6edf3;
 }
 
 #settings-modal .btn-row {
@@ -792,23 +792,23 @@ body {
 }
 
 #settings-modal .btn-row button {
-  background: #0f3460;
-  color: #e0e0e0;
-  border: 1px solid #1a4a8a;
+  background: #2d333b;
+  color: #e6edf3;
+  border: 1px solid #3d444d;
   padding: 6px 16px;
   border-radius: 4px;
   font-size: 13px;
   cursor: pointer;
 }
 
-#settings-modal .btn-row button:hover { background: #1a4a8a; }
+#settings-modal .btn-row button:hover { background: #3d444d; }
 
 #settings-modal .btn-row button.save {
-  background: #2e7d32;
-  border-color: #388e3c;
+  background: #2ea043;
+  border-color: #3fb950;
 }
 
-#settings-modal .btn-row button.save:hover { background: #388e3c; }
+#settings-modal .btn-row button.save:hover { background: #3fb950; }
 
 /* ── Empty state ── */
 #empty-state {
@@ -823,16 +823,16 @@ body {
 
 #empty-state button {
   margin-top: 12px;
-  background: #0f3460;
-  color: #e0e0e0;
-  border: 1px solid #1a4a8a;
+  background: #2d333b;
+  color: #e6edf3;
+  border: 1px solid #3d444d;
   padding: 8px 16px;
   border-radius: 4px;
   font-size: 13px;
   cursor: pointer;
 }
 
-#empty-state button:hover { background: #1a4a8a; }
+#empty-state button:hover { background: #3d444d; }
 
 /* ── Room Drag-and-Drop ── */
 .room-drag-ghost {
@@ -849,7 +849,7 @@ body {
 .room-cell.drag-source .room-cell-inner {
   opacity: 0.3;
   border-style: dashed;
-  border-color: #4fc3f7;
+  border-color: #f588c2;
 }
 
 .room-cell.drag-target-swap .room-cell-inner {
@@ -863,8 +863,8 @@ body {
   position: absolute;
   width: 320px;
   height: 190px;
-  border: 2px dashed #4fc3f7;
-  background: rgba(79, 195, 247, 0.05);
+  border: 2px dashed #f588c2;
+  background: rgba(238, 85, 170, 0.05);
   border-radius: 4px;
   pointer-events: none;
   z-index: 6;
@@ -1003,7 +1003,7 @@ body {
         <select id="settings-base-room" style="flex:1;">
           <option value="">(None &mdash; synthesize .crm automatically)</option>
         </select>
-        <button type="button" id="btn-refresh-base-room" title="Refresh .crm file list" style="background:#0f3460;color:#e0e0e0;border:1px solid #1a4a8a;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:14px;line-height:1;">&#x21bb;</button>
+        <button type="button" id="btn-refresh-base-room" title="Refresh .crm file list" style="background:#2d333b;color:#e6edf3;border:1px solid #3d444d;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:14px;line-height:1;">&#x21bb;</button>
       </div>
       <div class="token-help">Optional. If set, new rooms copy this .crm. Otherwise a .crm is synthesized automatically.</div>
     </div>
@@ -2560,18 +2560,18 @@ function showConfirmDialog(message) {
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:2000;display:flex;align-items:center;justify-content:center;';
     const dialog = document.createElement('div');
-    dialog.style.cssText = 'background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:24px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.6);';
+    dialog.style.cssText = 'background:#1e2329;border:1px solid #2d333b;border-radius:8px;padding:24px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.6);';
     const msg = document.createElement('p');
-    msg.style.cssText = 'font-size:14px;color:#e0e0e0;margin-bottom:20px;line-height:1.5;';
+    msg.style.cssText = 'font-size:14px;color:#e6edf3;margin-bottom:20px;line-height:1.5;';
     msg.textContent = message;
     const btnRow = document.createElement('div');
     btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
     const cancelBtn = document.createElement('button');
     cancelBtn.textContent = 'Cancel';
-    cancelBtn.style.cssText = 'background:#0f3460;color:#e0e0e0;border:1px solid #1a4a8a;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;';
+    cancelBtn.style.cssText = 'background:#2d333b;color:#e6edf3;border:1px solid #3d444d;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;';
     const confirmBtn = document.createElement('button');
     confirmBtn.textContent = 'Continue';
-    confirmBtn.style.cssText = 'background:#e94560;color:#fff;border:1px solid #e94560;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;';
+    confirmBtn.style.cssText = 'background:#ee55aa;color:#fff;border:1px solid #ee55aa;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;';
     cancelBtn.addEventListener('click', () => { document.body.removeChild(overlay); resolve(false); });
     confirmBtn.addEventListener('click', () => { document.body.removeChild(overlay); resolve(true); });
     btnRow.appendChild(cancelBtn);
@@ -2588,22 +2588,22 @@ function showPromptDialog(message, defaultValue) {
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:2000;display:flex;align-items:center;justify-content:center;';
     const dialog = document.createElement('div');
-    dialog.style.cssText = 'background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:24px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.6);';
+    dialog.style.cssText = 'background:#1e2329;border:1px solid #2d333b;border-radius:8px;padding:24px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.6);';
     const msg = document.createElement('p');
-    msg.style.cssText = 'font-size:14px;color:#e0e0e0;margin-bottom:12px;line-height:1.5;';
+    msg.style.cssText = 'font-size:14px;color:#e6edf3;margin-bottom:12px;line-height:1.5;';
     msg.textContent = message;
     const input = document.createElement('input');
     input.type = 'text';
     input.value = defaultValue || '';
-    input.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 10px;border:1px solid #0f3460;border-radius:4px;background:#1a1a2e;color:#e0e0e0;font-size:14px;margin-bottom:16px;outline:none;';
+    input.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 10px;border:1px solid #2d333b;border-radius:4px;background:#171b21;color:#e6edf3;font-size:14px;margin-bottom:16px;outline:none;';
     const btnRow = document.createElement('div');
     btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
     const cancelBtn = document.createElement('button');
     cancelBtn.textContent = 'Cancel';
-    cancelBtn.style.cssText = 'background:#0f3460;color:#e0e0e0;border:1px solid #1a4a8a;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;';
+    cancelBtn.style.cssText = 'background:#2d333b;color:#e6edf3;border:1px solid #3d444d;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;';
     const okBtn = document.createElement('button');
     okBtn.textContent = 'OK';
-    okBtn.style.cssText = 'background:#e94560;color:#fff;border:1px solid #e94560;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;';
+    okBtn.style.cssText = 'background:#ee55aa;color:#fff;border:1px solid #ee55aa;padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;';
     cancelBtn.addEventListener('click', () => { document.body.removeChild(overlay); resolve(null); });
     okBtn.addEventListener('click', () => { document.body.removeChild(overlay); resolve(input.value); });
     input.addEventListener('keydown', (e) => {
@@ -2789,7 +2789,7 @@ $btnGenerate.addEventListener('click', async () => {
       const overallType = roomOverallType(entry.changes);
 
       const row = document.createElement('div');
-      row.style.cssText = 'padding:8px;border-bottom:1px solid #0f3460;font-size:13px;';
+      row.style.cssText = 'padding:8px;border-bottom:1px solid #2d333b;font-size:13px;';
 
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;';
@@ -2826,7 +2826,7 @@ $btnGenerate.addEventListener('click', async () => {
         ul.style.cssText = 'margin:0;padding-left:20px;list-style:disc;';
         for (const c of entry.changes) {
           const li = document.createElement('li');
-          li.style.cssText = `font-size:12px;color:${c.bold ? '#e0e0e0' : '#aaa'};padding:1px 0;${c.bold ? 'font-weight:600;' : ''}`;
+          li.style.cssText = `font-size:12px;color:${c.bold ? '#e6edf3' : '#aaa'};padding:1px 0;${c.bold ? 'font-weight:600;' : ''}`;
           const cTypeSpan = document.createElement('span');
           cTypeSpan.className = `change-type ${c.type}`;
           cTypeSpan.textContent = c.type;
