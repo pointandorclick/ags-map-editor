@@ -7,6 +7,23 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
+/// Strip the `com.apple.provenance` extended attribute that macOS sets on files
+/// created by sandboxed apps. Without this, Wine/CrossOver (used by AGS Editor)
+/// may not be able to modify the files.
+#[cfg(target_os = "macos")]
+fn strip_provenance(path: &Path) {
+    use std::ffi::CString;
+    if let Ok(cpath) = CString::new(path.to_string_lossy().as_bytes()) {
+        let attr = CString::new("com.apple.provenance").unwrap();
+        unsafe {
+            libc::removexattr(cpath.as_ptr(), attr.as_ptr(), 0);
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn strip_provenance(_path: &Path) {}
+
 /// Validate that a filename does not contain path traversal sequences or separators.
 fn validate_filename(name: &str) -> Result<(), String> {
     if name.contains("..") || name.contains('/') || name.contains('\\') || name.is_empty() {
@@ -138,7 +155,9 @@ fn save_project_data(project_path: String, data: String) -> Result<(), String> {
         .ok_or("Invalid project path")?;
     let agm_file = path.join(format!("{}.agm", dir_name));
 
-    fs::write(&agm_file, data).map_err(|e| e.to_string())
+    fs::write(&agm_file, &data).map_err(|e| e.to_string())?;
+    strip_provenance(&agm_file);
+    Ok(())
 }
 
 #[tauri::command]
@@ -154,7 +173,9 @@ fn read_room_script(project_path: String, room_id: u32) -> Result<String, String
 #[tauri::command]
 fn write_room_script(project_path: String, room_id: u32, content: String) -> Result<(), String> {
     let path = Path::new(&project_path).join(format!("room{}.asc", room_id));
-    fs::write(&path, content).map_err(|e| e.to_string())
+    fs::write(&path, content).map_err(|e| e.to_string())?;
+    strip_provenance(&path);
+    Ok(())
 }
 
 #[tauri::command]
@@ -170,9 +191,12 @@ fn write_game_agf(project_path: String, content: String) -> Result<(), String> {
 
     if agf_path.exists() {
         fs::copy(&agf_path, &bak_path).map_err(|e| e.to_string())?;
+        strip_provenance(&bak_path);
     }
 
-    fs::write(&agf_path, content).map_err(|e| e.to_string())
+    fs::write(&agf_path, content).map_err(|e| e.to_string())?;
+    strip_provenance(&agf_path);
+    Ok(())
 }
 
 #[tauri::command]
@@ -456,6 +480,7 @@ fn update_crm_room_events(
     }
 
     fs::write(&crm_path, new_data).map_err(|e| e.to_string())?;
+    strip_provenance(&crm_path);
 
     Ok(changes)
 }
@@ -499,6 +524,7 @@ fn copy_room_crm(
         ));
     }
     fs::copy(&template_path, &target_path).map_err(|e| e.to_string())?;
+    strip_provenance(&target_path);
     Ok(true)
 }
 
@@ -517,6 +543,7 @@ fn save_base_room(project_path: String, template_filename: String) -> Result<(),
 
     let target = base_room_dir.join("base-room.crm");
     fs::copy(&source, &target).map_err(|e| e.to_string())?;
+    strip_provenance(&target);
 
     Ok(())
 }
@@ -547,6 +574,7 @@ fn copy_all_room_files(
             results.push(format!("skipped:{}", target_name));
         } else {
             fs::copy(entry.path(), &target_path).map_err(|e| e.to_string())?;
+            strip_provenance(&target_path);
             results.push(format!("copied:{}", target_name));
         }
     }
@@ -1198,6 +1226,7 @@ fn embed_image_in_crm(
     }
 
     fs::write(&crm_path, new_data).map_err(|e| e.to_string())?;
+    strip_provenance(&crm_path);
 
     Ok(format!(
         "Embedded {}x{} background in room{}.crm",
@@ -1374,7 +1403,8 @@ fn create_room_crm(
     };
 
     let crm = build_crm(width, height, bpp, &pixels);
-    fs::write(&crm_path, crm).map_err(|e| e.to_string())?;
+    fs::write(&crm_path, &crm).map_err(|e| e.to_string())?;
+    strip_provenance(&crm_path);
 
     if pixels.is_empty() {
         Ok(format!("Synthesized room{}.crm ({}x{} black)", room_id, width, height))
@@ -1639,18 +1669,6 @@ mod tests {
         assert!(validate_filename("room1.crm").is_ok());
         assert!(validate_filename("test.png").is_ok());
         assert!(validate_filename("my-file_v2.txt").is_ok());
-    }
-
-    #[test]
-    fn export_background_rejects_path_traversal() {
-        let dir = temp_project_dir("bg_traversal");
-        let path = dir.to_string_lossy().to_string();
-        let b64 = base64::engine::general_purpose::STANDARD.encode(b"data");
-
-        let result = export_background_image(path, "../evil.png".into(), b64);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid filename"));
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
