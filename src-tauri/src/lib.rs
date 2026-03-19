@@ -176,24 +176,6 @@ fn write_game_agf(project_path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn export_background_image(
-    project_path: String,
-    filename: String,
-    base64_data: String,
-) -> Result<(), String> {
-    validate_filename(&filename)?;
-    let bg_dir = Path::new(&project_path).join("Backgrounds");
-    fs::create_dir_all(&bg_dir).map_err(|e| e.to_string())?;
-
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(&base64_data)
-        .map_err(|e| e.to_string())?;
-
-    let file_path = bg_dir.join(&filename);
-    fs::write(&file_path, bytes).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 fn list_room_ids(project_path: String) -> Result<Vec<u32>, String> {
     let dir = Path::new(&project_path);
     let mut ids: Vec<u32> = fs::read_dir(dir)
@@ -571,23 +553,6 @@ fn copy_all_room_files(
 
     results.sort();
     Ok(results)
-}
-
-#[tauri::command]
-fn check_background_matches(
-    project_path: String,
-    filename: String,
-    base64_data: String,
-) -> Result<bool, String> {
-    let file_path = Path::new(&project_path).join("Backgrounds").join(&filename);
-    if !file_path.exists() {
-        return Ok(false);
-    }
-    let existing = fs::read(&file_path).map_err(|e| e.to_string())?;
-    let new_data = base64::engine::general_purpose::STANDARD
-        .decode(&base64_data)
-        .map_err(|e| e.to_string())?;
-    Ok(existing == new_data)
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1240,16 +1205,7 @@ fn embed_image_in_crm(
     ))
 }
 
-#[tauri::command]
-fn delete_background_image(project_path: String, filename: String) -> Result<bool, String> {
-    let file_path = Path::new(&project_path).join("Backgrounds").join(&filename);
-    if file_path.exists() {
-        fs::remove_file(&file_path).map_err(|e| e.to_string())?;
-        Ok(true)
-    } else {
-        Ok(false)
-    }
-}
+
 
 #[cfg(test)]
 mod tests {
@@ -1362,34 +1318,6 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    // ── export_background_image ────────────────────────────
-
-    #[test]
-    fn export_background_image_decodes_base64() {
-        let dir = temp_project_dir("bg_export");
-        let path = dir.to_string_lossy().to_string();
-        // Base64 for bytes [0x89, 0x50, 0x4E, 0x47] (PNG magic)
-        let b64 = base64::engine::general_purpose::STANDARD.encode(&[0x89, 0x50, 0x4E, 0x47]);
-
-        export_background_image(path, "test.png".into(), b64).unwrap();
-
-        let saved = fs::read(dir.join("Backgrounds").join("test.png")).unwrap();
-        assert_eq!(saved, vec![0x89, 0x50, 0x4E, 0x47]);
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn export_background_image_creates_backgrounds_dir() {
-        let dir = temp_project_dir("bg_mkdir");
-        let path = dir.to_string_lossy().to_string();
-        let b64 = base64::engine::general_purpose::STANDARD.encode(b"data");
-
-        assert!(!dir.join("Backgrounds").exists());
-        export_background_image(path, "img.png".into(), b64).unwrap();
-        assert!(dir.join("Backgrounds").join("img.png").exists());
-        let _ = fs::remove_dir_all(&dir);
-    }
-
     // ── list_room_ids ──────────────────────────────────────
 
     #[test]
@@ -1431,8 +1359,6 @@ mod tests {
         assert_eq!(result, false);
     }
 
-    // ── check_background_matches ───────────────────────────
-
     // ── save_base_room ───────────────────────────────────
 
     #[test]
@@ -1465,55 +1391,6 @@ mod tests {
         let result = save_base_room(dir.to_string_lossy().to_string(), "nonexistent.crm".into());
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Source file not found"));
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn check_background_matches_true() {
-        let dir = temp_project_dir("bg_match");
-        let bg_dir = dir.join("Backgrounds");
-        fs::create_dir_all(&bg_dir).unwrap();
-        let data = vec![1, 2, 3, 4];
-        fs::write(bg_dir.join("room1.png"), &data).unwrap();
-        let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
-
-        let result = check_background_matches(
-            dir.to_string_lossy().to_string(),
-            "room1.png".into(),
-            b64,
-        ).unwrap();
-        assert!(result);
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn check_background_matches_false_different_data() {
-        let dir = temp_project_dir("bg_diff");
-        let bg_dir = dir.join("Backgrounds");
-        fs::create_dir_all(&bg_dir).unwrap();
-        fs::write(bg_dir.join("room1.png"), &[1, 2, 3]).unwrap();
-        let b64 = base64::engine::general_purpose::STANDARD.encode(&[9, 9, 9]);
-
-        let result = check_background_matches(
-            dir.to_string_lossy().to_string(),
-            "room1.png".into(),
-            b64,
-        ).unwrap();
-        assert!(!result);
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn check_background_matches_false_missing_file() {
-        let dir = temp_project_dir("bg_missing");
-        let b64 = base64::engine::general_purpose::STANDARD.encode(b"data");
-
-        let result = check_background_matches(
-            dir.to_string_lossy().to_string(),
-            "nope.png".into(),
-            b64,
-        ).unwrap();
-        assert!(!result);
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -1794,33 +1671,6 @@ mod tests {
         assert_eq!(stride, width * bpp);
         assert_eq!(h, height);
         assert_eq!(&decompressed[8..], &pixels);
-    }
-
-    // ── delete_background_image tests ──────────────────────
-
-    #[test]
-    fn delete_background_image_removes_file() {
-        let dir = temp_project_dir("del_bg");
-        let path = dir.to_string_lossy().to_string();
-        let bg_dir = dir.join("Backgrounds");
-        fs::create_dir_all(&bg_dir).unwrap();
-        fs::write(bg_dir.join("Room1.png"), b"img").unwrap();
-
-        let result = delete_background_image(path, "Room1.png".into()).unwrap();
-        assert!(result);
-        assert!(!bg_dir.join("Room1.png").exists());
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn delete_background_image_missing_is_ok() {
-        let dir = temp_project_dir("del_bg_miss");
-        let path = dir.to_string_lossy().to_string();
-        fs::create_dir_all(dir.join("Backgrounds")).unwrap();
-
-        let result = delete_background_image(path, "Nonexistent.png".into()).unwrap();
-        assert!(!result);
-        let _ = fs::remove_dir_all(&dir);
     }
 
     // ── Synthetic .crm file for integration tests ─────────
@@ -2142,19 +1992,16 @@ pub fn run() {
             write_room_script,
             read_game_agf,
             write_game_agf,
-            export_background_image,
             list_room_ids,
             list_crm_files,
             copy_base_room_file,
             check_file_exists,
-            check_background_matches,
             update_crm_room_events,
             list_crm_room_ids,
             copy_room_crm,
             save_base_room,
             copy_all_room_files,
             embed_image_in_crm,
-            delete_background_image,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
