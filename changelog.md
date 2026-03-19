@@ -3,7 +3,7 @@
 ## v1.3.0
 - feat: Images from map screens are automatically embedded into room.crm files
 - fix: harden backend validation, debounce saves, and eliminate innerHTML XSS vectors
-test: add coverage for CRM event registration, LZSS edge cases, and error status handling
+- test: add coverage for CRM event registration, LZSS edge cases, and error status handling
 - feat: add context aware template mark/unmark and indicator
 - style: make UI less intrusive and change feature colour to pink
 - style: add light/dark theme switcher
