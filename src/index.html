@@ -148,10 +148,10 @@ body {
   stroke-linejoin: round;
 }
 
-/* ── Template source badge (display mode) ── */
+/* ── Template source badge ── */
 .template-badge {
   position: absolute;
-  top: 4px;
+  bottom: 4px;
   right: 4px;
   display: flex;
   align-items: center;
@@ -164,6 +164,9 @@ body {
   border-radius: 3px;
   pointer-events: none;
   z-index: 2;
+}
+.template-badge.above-title {
+  bottom: 26px;
 }
 .template-badge svg {
   width: 12px;
@@ -1422,12 +1425,12 @@ function renderGrid() {
       inner.appendChild(titleEl);
     }
 
-    // Display mode: template source badge
-    if (mode === 'display' && room.templateId && !room.isTemplate) {
+    // Template source badge (both modes)
+    if (room.templateId && !room.isTemplate) {
       const sourceId = resolveTemplateSourceRoomId(state, room.templateId);
       if (sourceId !== null) {
         const badge = document.createElement('div');
-        badge.className = 'template-badge';
+        badge.className = 'template-badge' + (mode === 'display' && room.title ? ' above-title' : '');
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.setAttribute('viewBox', '0 0 24 24');
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
