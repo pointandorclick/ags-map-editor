@@ -1205,7 +1205,185 @@ fn embed_image_in_crm(
     ))
 }
 
+// ══════════════════════════════════════════════════════════════════════
+//  Synthesize a .crm file from scratch
+// ══════════════════════════════════════════════════════════════════════
 
+/// Build a minimal but valid .crm file matching AGS format version 33 (kRoomVersion_3508).
+/// `pixels` is the raw BGRA pixel data (or empty for a black background).
+fn build_crm(bg_width: u32, bg_height: u32, bpp: u32, pixels: &[u8]) -> Vec<u8> {
+    let mut crm = Vec::new();
+
+    // ── File header: 2-byte version ──
+    let version: u16 = 33; // kRoomVersion_3508
+    crm.extend_from_slice(&version.to_le_bytes());
+
+    // ── Main block (ID=1) ──
+    crm.push(1u8); // block_id
+    let len_offset = crm.len();
+    crm.extend_from_slice(&0i64.to_le_bytes()); // placeholder for 8-byte length
+
+    let main_start = crm.len();
+
+    // 1. BackgroundBPP (int32)
+    crm.extend_from_slice(&(bpp as i32).to_le_bytes());
+
+    // 2. WalkBehindCount (int16) = 1
+    crm.extend_from_slice(&1i16.to_le_bytes());
+    crm.extend_from_slice(&0i16.to_le_bytes()); // baseline
+
+    // 3. HotspotCount (int32) = 1 (hotspot 0 = "no hotspot")
+    let hotspot_count: i32 = 1;
+    crm.extend_from_slice(&hotspot_count.to_le_bytes());
+
+    // 4. Hotspot walk-to points
+    crm.extend_from_slice(&0i16.to_le_bytes());
+    crm.extend_from_slice(&0i16.to_le_bytes());
+
+    // 5-6. Hotspot names + script names (length-prefixed empty strings)
+    for _ in 0..(hotspot_count * 2) {
+        crm.extend_from_slice(&0i32.to_le_bytes());
+    }
+
+    // 7. Legacy poly-point areas: int32 = 0
+    crm.extend_from_slice(&0i32.to_le_bytes());
+
+    // 8. Room edges: 4 × int16
+    crm.extend_from_slice(&[0u8; 8]);
+
+    // 9. Object count (int16) = 0
+    let obj_count: i16 = 0;
+    crm.extend_from_slice(&obj_count.to_le_bytes());
+
+    // 10. Local variables: int32 count = 0
+    crm.extend_from_slice(&0i32.to_le_bytes());
+
+    // 11. Region count (int32) = 16
+    let region_count: i32 = 16;
+    crm.extend_from_slice(&region_count.to_le_bytes());
+
+    // 12. Event handlers: all groups with 7 blank event slots
+    let groups = 1 + hotspot_count as usize + obj_count as usize + region_count as usize;
+    for _ in 0..groups {
+        crm.extend_from_slice(&7i32.to_le_bytes()); // 7 events per group
+        for _ in 0..7 {
+            crm.push(0); // empty null-terminated string
+        }
+    }
+
+    // 13. Object baselines (none)
+    // 14. Room dimensions
+    crm.extend_from_slice(&(bg_width as i16).to_le_bytes());
+    crm.extend_from_slice(&(bg_height as i16).to_le_bytes());
+
+    // 15. Object flags (none)
+    // 16. MaskResolution
+    crm.extend_from_slice(&1i16.to_le_bytes());
+
+    // 17. Walk area data: 16 areas × 5 arrays × int16
+    crm.extend_from_slice(&16i32.to_le_bytes());
+    crm.extend_from_slice(&[0u8; 5 * 16 * 2]);
+
+    // 18. Password (11 bytes)
+    crm.extend_from_slice(&[0u8; 11]);
+
+    // 19. Room options (6 + 4 reserved)
+    crm.extend_from_slice(&[0u8; 10]);
+
+    // 20. MessageCount = 0
+    crm.extend_from_slice(&0i16.to_le_bytes());
+
+    // 21. GameID
+    crm.extend_from_slice(&0i32.to_le_bytes());
+
+    // 22-23. Messages (none)
+    // 24. Legacy animation count = 0
+    crm.extend_from_slice(&0i16.to_le_bytes());
+
+    // 25. Walk area PlayerView duplicate: 16 × int16
+    crm.extend_from_slice(&[0u8; 16 * 2]);
+
+    // 26. Region light levels: 16 × int16
+    crm.extend_from_slice(&[0u8; 16 * 2]);
+
+    // 27. Region tints: 16 × int32
+    crm.extend_from_slice(&[0u8; 16 * 4]);
+
+    // 28. Background image (LZSS compressed)
+    let bg_pixels = if pixels.is_empty() {
+        vec![0u8; (bg_width * bg_height * bpp) as usize]
+    } else {
+        pixels.to_vec()
+    };
+    let bg_blob = encode_background(&bg_pixels, bg_width, bg_height, bpp);
+    crm.extend_from_slice(&bg_blob);
+
+    // 29. Area masks (RLE): 4 masks
+    let mask_w = bg_width as i16;
+    let mask_h = bg_height as i16;
+    for _ in 0..4 {
+        crm.extend_from_slice(&mask_w.to_le_bytes());
+        crm.extend_from_slice(&mask_h.to_le_bytes());
+        let total_pixels = (bg_width * bg_height) as usize;
+        let mut remaining = total_pixels;
+        while remaining > 0 {
+            let run = remaining.min(128);
+            let cx = (1i16 - run as i16) as i8;
+            crm.push(cx as u8);
+            crm.push(0);
+            remaining -= run;
+        }
+        crm.extend_from_slice(&[0u8; 768]); // palette
+    }
+
+    // EOF marker
+    crm.push(0xFF);
+
+    // Patch block length
+    let main_len = crm.len() - 1 - main_start;
+    crm[len_offset..len_offset + 8].copy_from_slice(&(main_len as i64).to_le_bytes());
+
+    crm
+}
+
+#[tauri::command]
+fn create_room_crm(
+    project_path: String,
+    room_id: u32,
+    width: u32,
+    height: u32,
+    base64_image_data: String,
+) -> Result<String, String> {
+    let crm_path = Path::new(&project_path).join(format!("room{}.crm", room_id));
+    if crm_path.exists() {
+        return Ok("exists".to_string());
+    }
+
+    let bpp: u32 = 4; // 32-bit BGRA
+
+    let pixels = if base64_image_data.is_empty() {
+        Vec::new() // build_crm will use black
+    } else {
+        let image_bytes = base64::engine::general_purpose::STANDARD
+            .decode(&base64_image_data)
+            .map_err(|e| format!("Failed to decode base64 image: {}", e))?;
+
+        let img = image::load_from_memory(&image_bytes)
+            .map_err(|e| format!("Failed to decode image: {}", e))?;
+
+        let rgba = img.to_rgba8();
+        rgba_to_bgra(rgba.as_raw())
+    };
+
+    let crm = build_crm(width, height, bpp, &pixels);
+    fs::write(&crm_path, crm).map_err(|e| e.to_string())?;
+
+    if pixels.is_empty() {
+        Ok(format!("Synthesized room{}.crm ({}x{} black)", room_id, width, height))
+    } else {
+        Ok(format!("Synthesized room{}.crm ({}x{} with background)", room_id, width, height))
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -1675,173 +1853,9 @@ mod tests {
 
     // ── Synthetic .crm file for integration tests ─────────
 
-    /// Build a minimal but valid .crm file matching AGS format version 33 (kRoomVersion_3508).
-    /// Returns the bytes and the embedded background dimensions.
+    /// Build a synthetic .crm for tests using the production build_crm function.
     fn build_synthetic_crm(bg_width: u32, bg_height: u32, bpp: u32) -> Vec<u8> {
-        let mut crm = Vec::new();
-
-        // ── File header: 2-byte version ──
-        let version: u16 = 33; // kRoomVersion_3508
-        crm.extend_from_slice(&version.to_le_bytes());
-
-        // ── Main block (ID=1) ──
-        let block_id: u8 = 1;
-        crm.push(block_id);
-        // Placeholder for 8-byte block length (version >= 32 uses i64)
-        let len_offset = crm.len();
-        crm.extend_from_slice(&0i64.to_le_bytes());
-
-        let main_start = crm.len();
-
-        // 1. BackgroundBPP (int32)
-        crm.extend_from_slice(&(bpp as i32).to_le_bytes());
-
-        // 2. WalkBehindCount (int16) = 1
-        crm.extend_from_slice(&1i16.to_le_bytes());
-        // Walk-behind baselines: 1 × int16
-        crm.extend_from_slice(&0i16.to_le_bytes());
-
-        // 3. HotspotCount (int32) = 1 (hotspot 0 is "no hotspot")
-        let hotspot_count: i32 = 1;
-        crm.extend_from_slice(&hotspot_count.to_le_bytes());
-
-        // 4. Hotspot walk-to points: 1 × (int16 x, int16 y)
-        crm.extend_from_slice(&0i16.to_le_bytes());
-        crm.extend_from_slice(&0i16.to_le_bytes());
-
-        // 5. Hotspot names (version >= 31: length-prefixed strings)
-        for _ in 0..hotspot_count {
-            crm.extend_from_slice(&0i32.to_le_bytes()); // empty string: len=0
-        }
-
-        // 6. Hotspot script names (version >= 31: length-prefixed)
-        for _ in 0..hotspot_count {
-            crm.extend_from_slice(&0i32.to_le_bytes()); // empty string: len=0
-        }
-
-        // 7. Legacy poly-point areas: int32 = 0
-        crm.extend_from_slice(&0i32.to_le_bytes());
-
-        // 8. Room edges: 4 × int16 (top, bottom, left, right)
-        for _ in 0..4 {
-            crm.extend_from_slice(&0i16.to_le_bytes());
-        }
-
-        // 9. Object count (int16) = 0
-        let obj_count: i16 = 0;
-        crm.extend_from_slice(&obj_count.to_le_bytes());
-        // No objects to write
-
-        // 10. Local variables: int32 count = 0
-        crm.extend_from_slice(&0i32.to_le_bytes());
-
-        // 11. Region count (int32) = 16 (MAX_ROOM_REGIONS)
-        let region_count: i32 = 16;
-        crm.extend_from_slice(&region_count.to_le_bytes());
-
-        // 12. Event handlers: 1 room + 1 hotspot + 0 objects + 16 regions = 18 groups
-        let groups = 1 + hotspot_count as usize + obj_count as usize + region_count as usize;
-        for _ in 0..groups {
-            // int32 event_count + null-terminated strings
-            let evt_count: i32 = 7; // typical room event count
-            crm.extend_from_slice(&evt_count.to_le_bytes());
-            for _ in 0..evt_count {
-                crm.push(0); // empty null-terminated string
-            }
-        }
-
-        // 13. Object baselines: int32 × 0
-        // (none, obj_count = 0)
-
-        // 14. Room dimensions: int16 width, int16 height
-        crm.extend_from_slice(&(bg_width as i16).to_le_bytes());
-        crm.extend_from_slice(&(bg_height as i16).to_le_bytes());
-
-        // 15. Object flags: int16 × 0
-        // (none)
-
-        // 16. MaskResolution (int16) = 1
-        crm.extend_from_slice(&1i16.to_le_bytes());
-
-        // 17. Walk area data: int32 count = 16 (MAX_WALK_AREAS)
-        let walk_area_count: i32 = 16;
-        crm.extend_from_slice(&walk_area_count.to_le_bytes());
-        // 5 arrays × 16 × int16 (all zeros)
-        for _ in 0..(5 * 16) {
-            crm.extend_from_slice(&0i16.to_le_bytes());
-        }
-
-        // 18. Password: 11 zero bytes
-        crm.extend_from_slice(&[0u8; 11]);
-
-        // 19. Room options: 6 bytes + 4 reserved
-        crm.extend_from_slice(&[0u8; 10]);
-
-        // 20. MessageCount (int16) = 0
-        crm.extend_from_slice(&0i16.to_le_bytes());
-
-        // 21. GameID (int32) — version >= 25
-        crm.extend_from_slice(&12345i32.to_le_bytes());
-
-        // 22. Message info: 0 messages, nothing to write
-        // 23. Messages: 0 messages, nothing to write
-
-        // 24. Legacy animation count (int16) = 0
-        crm.extend_from_slice(&0i16.to_le_bytes());
-
-        // 25. Walk area PlayerView duplicate: 16 × int16
-        for _ in 0..16 {
-            crm.extend_from_slice(&0i16.to_le_bytes());
-        }
-
-        // 26. Region light levels: 16 × int16
-        for _ in 0..16 {
-            crm.extend_from_slice(&0i16.to_le_bytes());
-        }
-
-        // 27. Region tints: 16 × int32
-        for _ in 0..16 {
-            crm.extend_from_slice(&0i32.to_le_bytes());
-        }
-
-        // 28. Background image (LZSS compressed)
-        let pixel_size = (bg_width * bg_height * bpp) as usize;
-        let pixels = vec![0u8; pixel_size]; // black background
-        let bg_blob = encode_background(&pixels, bg_width, bg_height, bpp);
-        crm.extend_from_slice(&bg_blob);
-
-        // 29. Area masks (RLE): 4 masks, each with int16 w, int16 h, minimal RLE data, 768-byte palette
-        let mask_w = bg_width as i16;
-        let mask_h = bg_height as i16;
-        for _ in 0..4 {
-            crm.extend_from_slice(&mask_w.to_le_bytes());
-            crm.extend_from_slice(&mask_h.to_le_bytes());
-            // Minimal RLE data: runs of zeros covering all pixels.
-            // RLE control byte cx: if cx < 0, repeat next byte (1 - cx) times.
-            // So for a run of length L: cx = 1 - L, range L=2..128 → cx=-1..-127.
-            let total_pixels = (bg_width * bg_height) as usize;
-            let mut remaining = total_pixels;
-            while remaining > 0 {
-                let run = remaining.min(128);
-                let cx = (1i16 - run as i16) as i8;
-                crm.push(cx as u8);
-                crm.push(0); // value
-                remaining -= run;
-            }
-            // 768-byte palette
-            crm.extend_from_slice(&[0u8; 768]);
-        }
-
-        // ── EOF marker ──
-        crm.push(0xFF);
-
-        // Patch the Main block length
-        // The masks are PART of the main block. Length = everything before EOF marker.
-        let main_len = crm.len() - 1 - main_start;
-        let len_bytes = (main_len as i64).to_le_bytes();
-        crm[len_offset..len_offset + 8].copy_from_slice(&len_bytes);
-
-        crm
+        build_crm(bg_width, bg_height, bpp, &[])
     }
 
     #[test]
@@ -1975,6 +1989,71 @@ mod tests {
 
         let _ = fs::remove_dir_all(&dir);
     }
+
+    // ── create_room_crm tests ────────────────────────────
+
+    #[test]
+    fn create_room_crm_synthesizes_black_background() {
+        let dir = temp_project_dir("create_crm_black");
+        let path = dir.to_string_lossy().to_string();
+
+        let result = create_room_crm(path.clone(), 5, 320, 200, String::new()).unwrap();
+        assert!(result.contains("black"));
+        assert!(dir.join("room5.crm").exists());
+
+        // Verify it's parseable
+        let data = fs::read(dir.join("room5.crm")).unwrap();
+        let version = u16::from_le_bytes([data[0], data[1]]);
+        let (main_start, main_len) = find_main_block(&data).unwrap();
+        let bg = find_background_in_main(&data, main_start, main_len, version).unwrap();
+        assert_eq!(bg.width, 320);
+        assert_eq!(bg.height, 200);
+        assert_eq!(bg.bpp, 4);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn create_room_crm_with_image() {
+        let dir = temp_project_dir("create_crm_img");
+        let path = dir.to_string_lossy().to_string();
+
+        // Create a 320x200 PNG
+        let img = image::RgbaImage::new(320, 200);
+        let mut png_bytes = Vec::new();
+        let encoder = image::codecs::png::PngEncoder::new(&mut png_bytes);
+        image::ImageEncoder::write_image(
+            encoder, img.as_raw(), 320, 200, image::ExtendedColorType::Rgba8,
+        ).unwrap();
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+
+        let result = create_room_crm(path.clone(), 10, 320, 200, b64).unwrap();
+        assert!(result.contains("background"));
+
+        // Verify parseable
+        let data = fs::read(dir.join("room10.crm")).unwrap();
+        let version = u16::from_le_bytes([data[0], data[1]]);
+        let (main_start, main_len) = find_main_block(&data).unwrap();
+        let bg = find_background_in_main(&data, main_start, main_len, version).unwrap();
+        assert_eq!(bg.width, 320);
+        assert_eq!(bg.height, 200);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn create_room_crm_skips_existing() {
+        let dir = temp_project_dir("create_crm_exists");
+        let path = dir.to_string_lossy().to_string();
+        fs::write(dir.join("room1.crm"), b"existing").unwrap();
+
+        let result = create_room_crm(path, 1, 320, 200, String::new()).unwrap();
+        assert_eq!(result, "exists");
+        // File unchanged
+        assert_eq!(fs::read(dir.join("room1.crm")).unwrap(), b"existing");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -2002,6 +2081,7 @@ pub fn run() {
             save_base_room,
             copy_all_room_files,
             embed_image_in_crm,
+            create_room_crm,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

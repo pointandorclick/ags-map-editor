@@ -1035,11 +1035,11 @@ body {
       <label for="settings-base-room">Base Room</label>
       <div style="display:flex;gap:6px;align-items:center;">
         <select id="settings-base-room" style="flex:1;">
-          <option value="">(None &mdash; skip .crm generation)</option>
+          <option value="">(None &mdash; synthesize .crm automatically)</option>
         </select>
         <button type="button" id="btn-refresh-base-room" title="Refresh .crm file list" style="background:#0f3460;color:#e0e0e0;border:1px solid #1a4a8a;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:14px;line-height:1;">&#x21bb;</button>
       </div>
-      <div class="token-help">New rooms will get a copy of this .crm file during generation.</div>
+      <div class="token-help">Optional. If set, new rooms copy this .crm. Otherwise a .crm is synthesized automatically.</div>
     </div>
     <div class="btn-row">
       <button id="btn-settings-reset">Reset to Default</button>
@@ -1053,10 +1053,10 @@ body {
 <div id="baseroom-overlay">
   <div id="baseroom-modal">
     <h2>Select Base Room</h2>
-    <p>Choose a .crm file to use as the base for new rooms. When you generate, each new room will start as a copy of this file.</p>
+    <p>Optionally choose a .crm file to use as the base for new rooms. If not set, rooms will be synthesized automatically.</p>
     <div style="display:flex;gap:6px;align-items:center;">
       <select id="baseroom-select" style="flex:1;">
-        <option value="">(None &mdash; skip .crm generation)</option>
+        <option value="">(None &mdash; synthesize automatically)</option>
       </select>
       <button type="button" id="btn-refresh-baseroom" title="Refresh .crm file list" style="background:#0f3460;color:#e0e0e0;border:1px solid #1a4a8a;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:14px;line-height:1;">&#x21bb;</button>
     </div>
@@ -1535,9 +1535,28 @@ function renderGrid() {
             return;
           }
           const reader = new FileReader();
-          reader.onload = () => {
+          reader.onload = async () => {
+            const dataUrl = reader.result;
+
+            // Check dimensions against the origin room (0x0) in this map
+            const originRoom = currentMap().rooms[coordKey(0, 0)];
+            if (originRoom && originRoom.imageDataUrl && !(room.x === 0 && room.y === 0)) {
+              try {
+                const newDims = await getImageDimensions(dataUrl);
+                const originDims = await getImageDimensions(originRoom.imageDataUrl);
+                if (newDims.width !== originDims.width || newDims.height !== originDims.height) {
+                  const ok = await showConfirmDialog(
+                    `This image is ${newDims.width}x${newDims.height} but the origin room (0,0) uses ${originDims.width}x${originDims.height}. Different room sizes may cause issues in AGS. Continue anyway?`
+                  );
+                  if (!ok) return;
+                }
+              } catch (err) {
+                console.warn('Could not check image dimensions:', err);
+              }
+            }
+
             updateRoom(room.x, room.y, {
-              imageDataUrl: reader.result,
+              imageDataUrl: dataUrl,
               imageFilename: file.name
             });
             renderGrid();
@@ -2024,7 +2043,7 @@ async function populateCrmSelect(selectEl, selectedValue) {
   selectEl.innerHTML = '';
   const noneOpt = document.createElement('option');
   noneOpt.value = '';
-  noneOpt.textContent = '(None \u2014 skip .crm generation)';
+  noneOpt.textContent = '(None \u2014 auto-generate .crm)';
   selectEl.appendChild(noneOpt);
   if (projectPath) {
     try {
@@ -2461,13 +2480,11 @@ async function updateGameAgf() {
   return changes;
 }
 
-// ── Background Image Export ──
-// ── Base Room (.crm) Copy ──
-async function copyBaseRoomFiles() {
+// ── Create Room .crm Files (base room copy OR synthesis) ──
+async function createRoomCrmFiles() {
   const changes = [];
+  const synthesizedRoomIds = new Set();
   const baseRoom = state.settings.baseRoom;
-
-  if (!baseRoom) return changes;
 
   for (const mapId of Object.keys(state.maps)) {
     const map = state.maps[mapId];
@@ -2477,41 +2494,78 @@ async function copyBaseRoomFiles() {
       if (room.roomId === null) continue;
       if (room.templateId) continue;
 
-      try {
-        const result = await invoke('copy_base_room_file', {
-          projectPath,
-          roomId: room.roomId,
-        });
-
-        if (result === 'copied') {
-          changes.push({
-            roomId: room.roomId,
-            type: 'new',
-            detail: `Copied BaseRoom/base-room.crm \u2192 room${room.roomId}.crm`
+      if (baseRoom) {
+        // ── Base room path: copy and let embed step handle the image ──
+        try {
+          const result = await invoke('copy_base_room_file', {
+            projectPath, roomId: room.roomId,
           });
-        } else if (result === 'exists') {
-          changes.push({
-            roomId: room.roomId,
-            type: 'skip',
-            detail: `room${room.roomId}.crm already exists`
-          });
+          if (result === 'copied') {
+            changes.push({ roomId: room.roomId, type: 'new', detail: `Copied BaseRoom/base-room.crm \u2192 room${room.roomId}.crm` });
+          } else if (result === 'exists') {
+            changes.push({ roomId: room.roomId, type: 'skip', detail: `room${room.roomId}.crm already exists` });
+          }
+        } catch (e) {
+          console.error(`Failed to copy .crm for Room ${room.roomId}:`, e);
+          changes.push({ roomId: room.roomId, type: 'skip', detail: `Error copying .crm: ${e}` });
         }
-      } catch (e) {
-        console.error(`Failed to copy .crm for Room ${room.roomId}:`, e);
-        changes.push({
-          roomId: room.roomId,
-          type: 'skip',
-          detail: `Error copying .crm: ${e}`
-        });
+      } else {
+        // ── Synthesis path: create .crm from scratch with image embedded ──
+        let base64Data = '';
+        let imgWidth = 320;
+        let imgHeight = 200;
+
+        if (room.imageDataUrl) {
+          const commaIndex = room.imageDataUrl.indexOf(',');
+          if (commaIndex !== -1) {
+            base64Data = room.imageDataUrl.substring(commaIndex + 1);
+            // Decode image dimensions from the data URL
+            try {
+              const imgSize = await getImageDimensions(room.imageDataUrl);
+              imgWidth = imgSize.width;
+              imgHeight = imgSize.height;
+            } catch (e) {
+              console.warn(`Could not read image dimensions for Room ${room.roomId}, using 320x200`);
+            }
+          }
+        }
+
+        try {
+          const result = await invoke('create_room_crm', {
+            projectPath, roomId: room.roomId,
+            width: imgWidth, height: imgHeight,
+            base64ImageData: base64Data
+          });
+          if (result === 'exists') {
+            changes.push({ roomId: room.roomId, type: 'skip', detail: `room${room.roomId}.crm already exists` });
+          } else {
+            changes.push({ roomId: room.roomId, type: 'new', detail: result, bold: true });
+            synthesizedRoomIds.add(room.roomId);
+          }
+        } catch (e) {
+          console.error(`Failed to create .crm for Room ${room.roomId}:`, e);
+          changes.push({ roomId: room.roomId, type: 'error', detail: `Error creating .crm: ${e}` });
+        }
       }
     }
   }
 
-  return changes;
+  return { changes, synthesizedRoomIds };
+}
+
+// Helper: get image dimensions from a data URL
+function getImageDimensions(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
 }
 
 // ── Embed Background Images into .crm Files ──
-async function embedBackgroundImages() {
+// Only needed for rooms created via base-room copy (synthesized rooms already have the image).
+async function embedBackgroundImages(synthesizedRoomIds) {
   const changes = [];
 
   for (const mapId of Object.keys(state.maps)) {
@@ -2522,6 +2576,8 @@ async function embedBackgroundImages() {
       if (!room.imageDataUrl || room.roomId === null) continue;
       // Template rooms have their .crm copied as-is from the template — don't embed
       if (room.templateId) continue;
+      // Synthesized rooms already have the image embedded during creation
+      if (synthesizedRoomIds.has(room.roomId)) continue;
 
       // Strip data URL prefix (e.g. "data:image/png;base64,")
       const commaIndex = room.imageDataUrl.indexOf(',');
@@ -2643,14 +2699,14 @@ $btnGenerate.addEventListener('click', async () => {
   // Step 4: Update Game.agf with room entries
   const agfChanges = await updateGameAgf();
 
-  // Step 5: Copy base room .crm for new rooms
-  const crmChanges = await copyBaseRoomFiles();
+  // Step 5: Create .crm files (base room copy or synthesis)
+  const { changes: crmChanges, synthesizedRoomIds } = await createRoomCrmFiles();
 
   // Step 6: Register leave events in .crm files (after .crm files exist)
   const crmEventChanges = await updateCrmEvents();
 
-  // Step 7: Embed background images into .crm files
-  const embedChanges = await embedBackgroundImages();
+  // Step 7: Embed background images (only for base-room-path rooms)
+  const embedChanges = await embedBackgroundImages(synthesizedRoomIds);
 
   $btnGenerate.disabled = false;
   updateGenerateButtonState();
@@ -2755,9 +2811,6 @@ $btnGenerate.addEventListener('click', async () => {
   }
   if (crmFailRooms.length > 0) {
     warningMessages.push(`These rooms could not have events registered in their .crm files. Build them in AGS Editor first, then re-generate: ${crmFailRooms.join(', ')}`);
-  }
-  if (!state.settings.baseRoom) {
-    warningMessages.push('No base room is configured. New rooms will not have .crm files created automatically. Set a base room in Settings.');
   }
 
   if (warningMessages.length > 0) {
@@ -2935,11 +2988,6 @@ async function selectProject(path, name) {
   await refreshRoomIds();
   refreshMapSelect();
   renderGrid();
-
-  // Prompt for base room if not yet configured
-  if (!state.settings.baseRoom && !state.settings.baseRoomPrompted) {
-    showBaseRoomPrompt();
-  }
 }
 
 // ══════════════════════════════════════
