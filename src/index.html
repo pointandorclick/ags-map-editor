@@ -793,82 +793,6 @@ body {
 
 #settings-modal .btn-row button.save:hover { background: #388e3c; }
 
-/* ── Base Room Prompt Modal ── */
-#baseroom-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.8);
-  z-index: 950;
-  display: none;
-  align-items: center;
-  justify-content: center;
-}
-
-#baseroom-overlay.visible {
-  display: flex;
-}
-
-#baseroom-modal {
-  background: #16213e;
-  border: 1px solid #0f3460;
-  border-radius: 8px;
-  padding: 24px;
-  max-width: 460px;
-  width: 90%;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
-}
-
-#baseroom-modal h2 {
-  font-size: 18px;
-  margin-bottom: 8px;
-  color: #4fc3f7;
-}
-
-#baseroom-modal p {
-  font-size: 13px;
-  color: #ccc;
-  line-height: 1.5;
-  margin-bottom: 12px;
-}
-
-#baseroom-modal select {
-  width: 100%;
-  background: #1a1a2e;
-  color: #e0e0e0;
-  border: 1px solid #0f3460;
-  padding: 6px 8px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-family: inherit;
-  box-sizing: border-box;
-}
-
-#baseroom-modal .btn-row {
-  display: flex;
-  gap: 8px;
-  margin-top: 16px;
-  justify-content: flex-end;
-}
-
-#baseroom-modal .btn-row button {
-  background: #0f3460;
-  color: #e0e0e0;
-  border: 1px solid #1a4a8a;
-  padding: 6px 16px;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-#baseroom-modal .btn-row button:hover { background: #1a4a8a; }
-
-#baseroom-modal .btn-row button.save {
-  background: #2e7d32;
-  border-color: #388e3c;
-}
-
-#baseroom-modal .btn-row button.save:hover { background: #388e3c; }
-
 /* ── Empty state ── */
 #empty-state {
   position: absolute;
@@ -1074,29 +998,13 @@ body {
   </div>
 </div>
 
-<!-- Base Room Prompt Modal -->
-<div id="baseroom-overlay">
-  <div id="baseroom-modal">
-    <h2>Select Base Room</h2>
-    <p>Optionally choose a .crm file to use as the base for new rooms. If not set, rooms will be synthesized automatically.</p>
-    <div style="display:flex;gap:6px;align-items:center;">
-      <select id="baseroom-select" style="flex:1;">
-        <option value="">(None &mdash; synthesize automatically)</option>
-      </select>
-      <button type="button" id="btn-refresh-baseroom" title="Refresh .crm file list" style="background:#0f3460;color:#e0e0e0;border:1px solid #1a4a8a;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:14px;line-height:1;">&#x21bb;</button>
-    </div>
-    <div class="btn-row">
-      <button id="btn-baseroom-skip">Skip</button>
-      <button class="save" id="btn-baseroom-save">Save</button>
-    </div>
-  </div>
-</div>
+
 
 <script type="module">
 import {
   coordKey, parseCoord, coordDisplay, makeRoom, generateId,
   buildDescription, buildAscDescription, buildLeaveFunction, parseLeaveFunction,
-  sanitizeFilename, roomOverallType, ASC_DIRECTIONS, assignRoomIdsSync,
+  roomOverallType, ASC_DIRECTIONS, assignRoomIdsSync,
   resolveTemplateSourceRoomId, markRoomAsTemplate, isTemplateInUse, unmarkRoomAsTemplate
 } from './logic.js';
 
@@ -2053,9 +1961,6 @@ $modalOverlay.addEventListener('click', (e) => {
 // Close modals on Escape
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    if ($baseroomOverlay.classList.contains('visible')) {
-      closeBaseRoomPrompt();
-    }
     if ($settingsOverlay.classList.contains('visible')) {
       closeSettings();
     }
@@ -2176,53 +2081,6 @@ $settingsDescFormat.addEventListener('input', updateDescPreview);
 $settingsOverlay.addEventListener('click', (e) => {
   if (e.target === $settingsOverlay) {
     closeSettings();
-  }
-});
-
-// ══════════════════════════════════════
-//  Base Room Prompt
-// ══════════════════════════════════════
-const $baseroomOverlay = document.getElementById('baseroom-overlay');
-const $baseroomSelect = document.getElementById('baseroom-select');
-
-async function showBaseRoomPrompt() {
-  await populateCrmSelect($baseroomSelect, '');
-  $baseroomOverlay.classList.add('visible');
-}
-
-function closeBaseRoomPrompt() {
-  $baseroomOverlay.classList.remove('visible');
-}
-
-document.getElementById('btn-baseroom-save').addEventListener('click', async () => {
-  const value = $baseroomSelect.value;
-  state.settings.baseRoom = value;
-  saveState();
-  closeBaseRoomPrompt();
-  if (value && value !== '(None)' && projectPath) {
-    try {
-      await invoke('save_base_room', { projectPath, templateFilename: value });
-    } catch (e) {
-      console.error('Failed to save base room copy:', e);
-    }
-  }
-});
-
-document.getElementById('btn-refresh-baseroom').addEventListener('click', () => {
-  populateCrmSelect($baseroomSelect, $baseroomSelect.value);
-});
-
-document.getElementById('btn-baseroom-skip').addEventListener('click', () => {
-  // Mark as explicitly skipped so prompt doesn't reappear
-  state.settings.baseRoom = '';
-  state.settings.baseRoomPrompted = true;
-  saveState();
-  closeBaseRoomPrompt();
-});
-
-$baseroomOverlay.addEventListener('click', (e) => {
-  if (e.target === $baseroomOverlay) {
-    closeBaseRoomPrompt();
   }
 });
 
