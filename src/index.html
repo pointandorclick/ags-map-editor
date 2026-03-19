@@ -1583,7 +1583,7 @@ function renderGrid() {
             const dataUrl = reader.result;
 
             // Check dimensions against the origin room (0x0) in this map
-            const originRoom = currentMap().rooms[coordKey(0, 0)];
+            const originRoom = getActiveMap().rooms[coordKey(0, 0)];
             if (originRoom && originRoom.imageDataUrl && !(room.x === 0 && room.y === 0)) {
               try {
                 const newDims = await getImageDimensions(dataUrl);
