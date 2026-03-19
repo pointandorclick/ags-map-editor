@@ -2222,9 +2222,6 @@ async function generateRoomScripts() {
         }
         newContent = lines.join('\n') + '\n';
         roomChanges.actions.push({ type: 'new', detail: 'Created new .asc file' });
-        const bgSanitized = sanitizeFilename(room.title || '');
-        const bgFilename = `Room${room.roomId}${bgSanitized ? '_' + bgSanitized : ''}.png`;
-        roomChanges.actions.push({ type: 'new', detail: `Add background image to Backgrounds/${bgFilename}`, bold: true });
         for (const dir of ASC_DIRECTIONS) {
           if (adjacencies[dir.name] !== undefined) {
             roomChanges.actions.push({ type: 'new', detail: `Added room_Leave${dir.name}() → Room ${adjacencies[dir.name]}` });
@@ -2424,45 +2421,6 @@ async function updateGameAgf() {
 }
 
 // ── Background Image Export ──
-async function exportBackgroundImages() {
-  const changes = [];
-
-  for (const mapId of Object.keys(state.maps)) {
-    const map = state.maps[mapId];
-    for (const key of Object.keys(map.rooms)) {
-      const room = map.rooms[key];
-      if (room.complete) continue;
-      if (!room.imageDataUrl || room.roomId === null) continue;
-
-      const sanitizedTitle = sanitizeFilename(room.title || '');
-      const filename = `Room${room.roomId}${sanitizedTitle ? '_' + sanitizedTitle : ''}.png`;
-
-      // Strip data URL prefix (e.g. "data:image/png;base64,")
-      const commaIndex = room.imageDataUrl.indexOf(',');
-      if (commaIndex === -1) {
-        changes.push({ roomId: room.roomId, type: 'skip', detail: `Room ${room.roomId}: Invalid image data URL` });
-        continue;
-      }
-      const base64Data = room.imageDataUrl.substring(commaIndex + 1);
-
-      try {
-        const matches = await invoke('check_background_matches', { projectPath, filename, base64Data });
-        if (matches) {
-          changes.push({ roomId: room.roomId, type: 'skip', detail: `${filename} already up to date` });
-          continue;
-        }
-        await invoke('export_background_image', { projectPath, filename, base64Data });
-        changes.push({ roomId: room.roomId, type: 'new', detail: `Exported ${filename}` });
-      } catch (e) {
-        console.error(`Failed to export background for Room ${room.roomId}:`, e);
-        changes.push({ roomId: room.roomId, type: 'skip', detail: `Error exporting ${filename}: ${e}` });
-      }
-    }
-  }
-
-  return changes;
-}
-
 // ── Base Room (.crm) Copy ──
 async function copyBaseRoomFiles() {
   const changes = [];
@@ -2524,9 +2482,6 @@ async function embedBackgroundImages() {
       // Template rooms have their .crm copied as-is from the template — don't embed
       if (room.templateId) continue;
 
-      const sanitizedTitle = sanitizeFilename(room.title || '');
-      const bgFilename = `Room${room.roomId}${sanitizedTitle ? '_' + sanitizedTitle : ''}.png`;
-
       // Strip data URL prefix (e.g. "data:image/png;base64,")
       const commaIndex = room.imageDataUrl.indexOf(',');
       if (commaIndex === -1) {
@@ -2540,13 +2495,6 @@ async function embedBackgroundImages() {
           projectPath, roomId: room.roomId, base64ImageData: base64Data
         });
         changes.push({ roomId: room.roomId, type: 'new', detail: result, bold: true });
-
-        // Delete the separate background file from Backgrounds/ since it's now embedded
-        try {
-          await invoke('delete_background_image', { projectPath, filename: bgFilename });
-        } catch (delErr) {
-          console.warn(`Could not delete Backgrounds/${bgFilename}:`, delErr);
-        }
       } catch (e) {
         const msg = String(e);
         if (msg.includes('not found')) {
@@ -2654,13 +2602,10 @@ $btnGenerate.addEventListener('click', async () => {
   // Step 4: Update Game.agf with room entries
   const agfChanges = await updateGameAgf();
 
-  // Step 5: Export background images
-  const bgChanges = await exportBackgroundImages();
-
-  // Step 6: Copy base room .crm for new rooms
+  // Step 5: Copy base room .crm for new rooms
   const crmChanges = await copyBaseRoomFiles();
 
-  // Step 7: Embed background images into .crm files
+  // Step 6: Embed background images into .crm files
   const embedChanges = await embedBackgroundImages();
 
   $btnGenerate.disabled = false;
@@ -2720,12 +2665,6 @@ $btnGenerate.addEventListener('click', async () => {
     if (gc.roomId === 0) continue; // skip file-level errors
     const entry = roomResults.get(gc.roomId);
     if (entry) entry.changes.push({ type: gc.type, detail: 'Game.agf: ' + gc.detail });
-  }
-
-  // Merge background export results
-  for (const bc of bgChanges) {
-    const entry = roomResults.get(bc.roomId);
-    if (entry) entry.changes.push(bc);
   }
 
   // Merge base room .crm copy results
