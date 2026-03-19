@@ -5,6 +5,7 @@
 - fix: harden backend validation, debounce saves, and eliminate innerHTML XSS vectors
 test: add coverage for CRM event registration, LZSS edge cases, and error status handling
 - feat: add context aware template mark/unmark and indicator
+- style: make UI less intrusive and change feature colour to pink
 
 ## v1.2.5
 - fix: right click context menu for create template more reliable
