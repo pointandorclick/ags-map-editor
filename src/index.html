@@ -73,6 +73,20 @@ body {
   border-color: #e94560;
 }
 
+#toolbar .mode-toggle {
+  gap: 0;
+}
+#toolbar .mode-toggle button {
+  border-radius: 0;
+}
+#toolbar .mode-toggle button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+#toolbar .mode-toggle button:last-child {
+  border-radius: 0 4px 4px 0;
+  border-left: none;
+}
+
 #toolbar .zoom-display {
   font-size: 12px;
   color: #888;
@@ -884,15 +898,15 @@ body {
     <button id="btn-delete-map">Delete</button>
   </div>
   <div class="separator"></div>
-  <div class="group">
-    <button id="btn-mode-edit" class="active">Edit</button>
-    <button id="btn-mode-display">Display</button>
-  </div>
-  <div class="separator"></div>
   <div class="group" id="zoom-controls" style="display:none;">
     <button id="btn-zoom-out">-</button>
     <span class="zoom-display" id="zoom-display">100%</span>
     <button id="btn-zoom-in">+</button>
+  </div>
+  <div class="separator"></div>
+  <div class="group mode-toggle">
+    <button id="btn-mode-edit" class="active">Edit</button>
+    <button id="btn-mode-display">Display</button>
   </div>
   <div class="separator"></div>
   <div class="group">
