@@ -2297,33 +2297,56 @@ async function generateRoomScripts() {
         }
       }
 
-      // Register leave events in .crm file (only sets empty slots, won't overwrite existing)
+      if (roomChanges.actions.length > 0) {
+        changes.push(roomChanges);
+      }
+    }
+  }
+
+  return changes;
+}
+
+// ── CRM Event Registration ──
+
+async function updateCrmEvents() {
+  const changes = [];
+
+  for (const mapId of Object.keys(state.maps)) {
+    const map = state.maps[mapId];
+    for (const key of Object.keys(map.rooms)) {
+      const room = map.rooms[key];
+      if (room.complete || room.roomId === null) continue;
+
+      const adjacencies = {};
+      for (const dir of ASC_DIRECTIONS) {
+        const neighbor = map.rooms[coordKey(room.x + dir.dx, room.y + dir.dy)];
+        if (neighbor && neighbor.roomId !== null) {
+          adjacencies[dir.name] = neighbor.roomId;
+        }
+      }
+
       const crmUpdates = [];
       for (const dir of ASC_DIRECTIONS) {
         if (adjacencies[dir.name] !== undefined) {
           crmUpdates.push({ index: dir.crmEventIndex, handler: `room_Leave${dir.name}` });
         }
       }
-      if (crmUpdates.length > 0) {
-        try {
-          const crmChanges = await invoke('update_crm_room_events', {
-            projectPath, roomId: room.roomId, updates: crmUpdates
-          });
-          for (const change of crmChanges) {
-            roomChanges.actions.push({ type: 'update', detail: change });
-          }
-        } catch (e) {
-          const msg = String(e);
-          if (msg.includes('not found')) {
-            roomChanges.actions.push({ type: 'skip', detail: `room${room.roomId}.crm not found — build in AGS first, then re-generate to register events` });
-          } else {
-            roomChanges.actions.push({ type: 'skip', detail: `.crm event update failed: ${msg}` });
-          }
-        }
-      }
+      if (crmUpdates.length === 0) continue;
 
-      if (roomChanges.actions.length > 0) {
-        changes.push(roomChanges);
+      try {
+        const results = await invoke('update_crm_room_events', {
+          projectPath, roomId: room.roomId, updates: crmUpdates
+        });
+        for (const change of results) {
+          changes.push({ roomId: room.roomId, type: 'update', detail: change });
+        }
+      } catch (e) {
+        const msg = String(e);
+        if (msg.includes('not found')) {
+          changes.push({ roomId: room.roomId, type: 'skip', detail: `room${room.roomId}.crm not found — build in AGS first, then re-generate to register events` });
+        } else {
+          changes.push({ roomId: room.roomId, type: 'skip', detail: `.crm event update failed: ${msg}` });
+        }
       }
     }
   }
@@ -2623,7 +2646,10 @@ $btnGenerate.addEventListener('click', async () => {
   // Step 5: Copy base room .crm for new rooms
   const crmChanges = await copyBaseRoomFiles();
 
-  // Step 6: Embed background images into .crm files
+  // Step 6: Register leave events in .crm files (after .crm files exist)
+  const crmEventChanges = await updateCrmEvents();
+
+  // Step 7: Embed background images into .crm files
   const embedChanges = await embedBackgroundImages();
 
   $btnGenerate.disabled = false;
@@ -2689,6 +2715,12 @@ $btnGenerate.addEventListener('click', async () => {
   for (const cc of crmChanges) {
     const entry = roomResults.get(cc.roomId);
     if (entry) entry.changes.push(cc);
+  }
+
+  // Merge CRM event registration results
+  for (const ce of crmEventChanges) {
+    const entry = roomResults.get(ce.roomId);
+    if (entry) entry.changes.push(ce);
   }
 
   // Merge embed background results
