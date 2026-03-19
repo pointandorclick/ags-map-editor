@@ -14,7 +14,9 @@ import {
   ASC_DIRECTIONS,
   assignRoomIdsSync,
   resolveTemplateSourceRoomId,
-  markRoomAsTemplate
+  markRoomAsTemplate,
+  isTemplateInUse,
+  unmarkRoomAsTemplate
 } from './logic.js';
 
 // ─── coordKey ───────────────────────────────────────────
@@ -545,5 +547,124 @@ describe('markRoomAsTemplate', () => {
 
     expect(templateId).not.toBeNull();
     expect(state.templates[templateId].name).toBe('First');
+  });
+});
+
+// ─── isTemplateInUse ───────────────────────────────────
+describe('isTemplateInUse', () => {
+  function makeState(maps, templates) {
+    return { maps, activeMapId: Object.keys(maps)[0] || null, templates: templates || {}, settings: {} };
+  }
+
+  it('returns false when no other room references the template', () => {
+    const room = makeRoom(0, 0);
+    room.isTemplate = true;
+    room.templateId = 't1';
+    room.imageDataUrl = 'data:image/png;base64,abc';
+    const state = makeState(
+      { m1: { name: 'Map1', rooms: { '0,0': room } } },
+      { t1: { name: 'Tmpl', imageDataUrl: 'x', sourceCoord: '0,0', sourceMapId: 'm1' } }
+    );
+    expect(isTemplateInUse(state, 't1')).toBe(false);
+  });
+
+  it('returns true when another room in the same map uses the template', () => {
+    const src = makeRoom(0, 0);
+    src.isTemplate = true;
+    src.templateId = 't1';
+    src.imageDataUrl = 'data:image/png;base64,abc';
+    const consumer = makeRoom(1, 0);
+    consumer.templateId = 't1';
+    const state = makeState(
+      { m1: { name: 'Map1', rooms: { '0,0': src, '1,0': consumer } } },
+      { t1: { name: 'Tmpl', imageDataUrl: 'x', sourceCoord: '0,0', sourceMapId: 'm1' } }
+    );
+    expect(isTemplateInUse(state, 't1')).toBe(true);
+  });
+
+  it('returns true when a room in a different map uses the template', () => {
+    const src = makeRoom(0, 0);
+    src.isTemplate = true;
+    src.templateId = 't1';
+    src.imageDataUrl = 'data:image/png;base64,abc';
+    const consumer = makeRoom(0, 0);
+    consumer.templateId = 't1';
+    const state = makeState(
+      {
+        m1: { name: 'Map1', rooms: { '0,0': src } },
+        m2: { name: 'Map2', rooms: { '0,0': consumer } }
+      },
+      { t1: { name: 'Tmpl', imageDataUrl: 'x', sourceCoord: '0,0', sourceMapId: 'm1' } }
+    );
+    expect(isTemplateInUse(state, 't1')).toBe(true);
+  });
+
+  it('returns false for a non-existent template ID', () => {
+    const state = makeState({ m1: { name: 'Map1', rooms: {} } });
+    expect(isTemplateInUse(state, 'nope')).toBe(false);
+  });
+
+  it('returns false when templates object is missing', () => {
+    const state = { maps: { m1: { name: 'Map1', rooms: {} } }, activeMapId: 'm1' };
+    expect(isTemplateInUse(state, 't1')).toBe(false);
+  });
+});
+
+// ─── unmarkRoomAsTemplate ──────────────────────────────
+describe('unmarkRoomAsTemplate', () => {
+  function makeState(maps, templates) {
+    return { maps, activeMapId: Object.keys(maps)[0] || null, templates: templates || {}, settings: {} };
+  }
+
+  it('clears isTemplate, templateId on the room and removes the template entry', () => {
+    const room = makeRoom(0, 0);
+    room.isTemplate = true;
+    room.templateId = 't1';
+    room.imageDataUrl = 'data:image/png;base64,abc';
+    const state = makeState(
+      { m1: { name: 'Map1', rooms: { '0,0': room } } },
+      { t1: { name: 'Tmpl', imageDataUrl: 'x', sourceCoord: '0,0', sourceMapId: 'm1' } }
+    );
+
+    const result = unmarkRoomAsTemplate(state, 'm1', '0,0');
+
+    expect(result).toBe(true);
+    expect(room.isTemplate).toBe(false);
+    expect(room.templateId).toBeNull();
+    expect(state.templates).not.toHaveProperty('t1');
+  });
+
+  it('returns false for a room that is not a template', () => {
+    const room = makeRoom(0, 0);
+    room.imageDataUrl = 'data:image/png;base64,abc';
+    const state = makeState({ m1: { name: 'Map1', rooms: { '0,0': room } } });
+
+    expect(unmarkRoomAsTemplate(state, 'm1', '0,0')).toBe(false);
+    expect(room.isTemplate).toBe(false);
+  });
+
+  it('returns false for an invalid map ID', () => {
+    const state = makeState({ m1: { name: 'Map1', rooms: {} } });
+    expect(unmarkRoomAsTemplate(state, 'bad', '0,0')).toBe(false);
+  });
+
+  it('returns false for a non-existent room coord', () => {
+    const state = makeState({ m1: { name: 'Map1', rooms: { '0,0': makeRoom(0, 0) } } });
+    expect(unmarkRoomAsTemplate(state, 'm1', '5,5')).toBe(false);
+  });
+
+  it('preserves the room image after unmarking', () => {
+    const room = makeRoom(0, 0);
+    room.isTemplate = true;
+    room.templateId = 't1';
+    room.imageDataUrl = 'data:image/png;base64,abc';
+    const state = makeState(
+      { m1: { name: 'Map1', rooms: { '0,0': room } } },
+      { t1: { name: 'Tmpl', imageDataUrl: 'x', sourceCoord: '0,0', sourceMapId: 'm1' } }
+    );
+
+    unmarkRoomAsTemplate(state, 'm1', '0,0');
+
+    expect(room.imageDataUrl).toBe('data:image/png;base64,abc');
   });
 });

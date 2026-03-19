@@ -135,6 +135,45 @@ export function markRoomAsTemplate(state, mapId, coordKeyStr, templateName) {
   return id;
 }
 
+/**
+ * Check whether any room (other than the template source itself) uses this template.
+ */
+export function isTemplateInUse(state, templateId) {
+  if (!templateId || !state.templates || !state.templates[templateId]) return false;
+  const tmpl = state.templates[templateId];
+  for (const mapId of Object.keys(state.maps)) {
+    const rooms = state.maps[mapId].rooms;
+    for (const key of Object.keys(rooms)) {
+      const room = rooms[key];
+      if (room.templateId === templateId) {
+        // Skip the source room itself — it references its own template
+        if (mapId === tmpl.sourceMapId && key === tmpl.sourceCoord) continue;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Unmark a room as a template and remove it from the templates collection.
+ * Returns true on success, false if the room wasn't a template.
+ */
+export function unmarkRoomAsTemplate(state, mapId, coordKeyStr) {
+  const map = state.maps[mapId];
+  if (!map) return false;
+  const room = map.rooms[coordKeyStr];
+  if (!room || !room.isTemplate) return false;
+
+  const templateId = room.templateId;
+  room.isTemplate = false;
+  room.templateId = null;
+  if (templateId && state.templates) {
+    delete state.templates[templateId];
+  }
+  return true;
+}
+
 export function resolveTemplateSourceRoomId(state, templateId) {
   const template = state.templates[templateId];
   if (!template) return null;
