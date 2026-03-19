@@ -278,6 +278,31 @@ describe('roomOverallType', () => {
     ];
     expect(roomOverallType(changes)).toBe('new');
   });
+
+  it('returns "error" when any change has type error', () => {
+    const changes = [
+      { type: 'update', detail: 'Updated description' },
+      { type: 'error', detail: 'Embed background failed' }
+    ];
+    expect(roomOverallType(changes)).toBe('error');
+  });
+
+  it('"new" room ID takes precedence over error', () => {
+    const changes = [
+      { type: 'new', detail: 'Assigned Room ID 5' },
+      { type: 'error', detail: 'Dimension mismatch' }
+    ];
+    expect(roomOverallType(changes)).toBe('new');
+  });
+
+  it('"error" takes precedence over "update"', () => {
+    const changes = [
+      { type: 'new', detail: 'Created new .asc file' },
+      { type: 'update', detail: 'Updated handler' },
+      { type: 'error', detail: 'CRM write failed' }
+    ];
+    expect(roomOverallType(changes)).toBe('error');
+  });
 });
 
 // ─── ASC_DIRECTIONS ─────────────────────────────────────
