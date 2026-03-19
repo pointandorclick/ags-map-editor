@@ -12,7 +12,7 @@ A desktop application for visually designing room maps for [Adventure Game Studi
 
 AGS Map Editor lets you lay out your game's rooms on a spatial grid, assign AGS room numbers, attach concept art, and add notes — all saved directly into your AGS project folder. It gives you a bird's-eye view of how your game world fits together.
 
-When you are ready click `Generate` and AGS Map Editor will create and update your AGS room files including the `room_Leave` functions with `player.ChangeRoomAutoPosition();` function pointing to the adjacent room.
+When you are ready click `Generate` and AGS Map Editor will create and update your AGS room files including the room backgrounds and `room_Leave` functions with `player.ChangeRoomAutoPosition();` function pointing to the adjacent room.
 
 ## Download
 
@@ -34,13 +34,12 @@ Download the latest installer for your platform from [GitHub Releases](https://g
 
 ## Getting Started
 
-1. In AGS create a new Room then under room events add the 4 room_Leave events via the UI. Leave everything else blank and not the Room ID. (This is required so AGS Map Editor knows the screen dimensions of your game and allows creation of the room_Leave functions automatically)
-2. Launch the app and click **Open AGS Project...** (or select a recent project) and point it at a AGS game directory (it must contain a `Game.agf` file).
-3. You will be prompted for a file to use as the Base room. Select the Room ID that you created in step 1. This will be used to create new rooms via the generate command. **You can now delete/re-use this room within AGS** — AGS Map Editor has copied it to `BaseRoom/base-room.crm` in your project directory.
-4. Create your first map
-5. Start building your map by clicking the **+** buttons to add rooms to the grid.
-6. Drag image files onto the rectangles to assign backgrounds.
-7. Click on a room to add more details.
+1. Launch the app and click **Open AGS Project...** (or select a recent project) and point it at a AGS game directory (it must contain a `Game.agf` file).
+2. (Optional) Refer to `base room` section below if you'd like to use your own default room
+3. Create your first map
+4. Start building your map by clicking the **+** buttons to add rooms to the grid.
+5. Drag image files onto the rectangles to assign backgrounds.
+6. Click on a room to add more details.
 
 ## Generating rooms in AGS
 
@@ -49,23 +48,25 @@ Once you are happy with your map layout (a work in progress is okay!) you can cl
 1. Create any rooms that do not have a room ID in your map.
 2. Add room_Leave<Direction> functions to all rooms and use `player.changeRoomAutoPosition()` to point to any adjacent room.
 3. Add and update room Descriptions field for each room so you can reference them in game and on your map.
-4. Present you with a list of what has been completed (Don't close this yet, see below).
+4. Insert the room image from the map as the background image for the room. 
+5. Present you with a list of what has been completed (Don't close this yet, see below).
 
 Once this is complete you will need to:
 
-1. Add background images. AGS Map Editor can't automatically assign the background but the image you used on the map is conveniently in your project root under a folder named `Backgrounds`. The file name will match the room name.
-2. Create edges by dragging the yellow edge marker to the appropriate spot on each side.
-3. (Optional) If there are edges that you won't use, you can remove the room_Leave function and event.
-4. Go back to AGS Map Editor and click "complete" on any room that no longer requires updating. This helps when you may have rooms that are transported via regions instead of edges and you don't want AGS Map Editor to keep adding in the room_Leave function each time you generate.
-5. Edit the room(s) as normal.
+1. Create edges by dragging the yellow edge marker to the appropriate spot on each side.
+2. (Optional) If there are edges that you won't use, you can remove the room_Leave function and event.
+3. Go back to AGS Map Editor and click "complete" on any room that no longer requires updating. This helps when you may have rooms that are transported via regions instead of edges and you don't want AGS Map Editor to keep adding in the room_Leave function each time you generate.
+4. Edit the room(s) as normal.
 
 ## Core Concepts
 
 ### Base Room
 
-When you first open a project, the editor prompts you to select a **base room** — an existing `.crm` file from your AGS project that will be used as the starting point for new rooms. The selected file is copied to `BaseRoom/base-room.crm` inside your project directory, so the original room can safely be deleted or re-used in AGS after selection. During generation, any room that doesn't already have a `.crm` file will get a copy of this base room. This gives new rooms the same dimensions, hotspot layout, walkable areas, and other properties as the base.
+AGS Editor will automatically create rooms for you that contain the background image you supplied in the map and stitch together the room_Leave functions based on the adjacent rooms on your map. If you have specific settings for your rooms (such as custom properties or settings) then you can create a room in AGS, save it then tell AGS Map Editor to use it as the base room instead of the default autogenerated one.
 
-You can change the base room at any time from **Settings**. Set it to "(None)" to skip `.crm` generation entirely.
+A **base room** is an existing `.crm` file from your AGS project that will be used as the starting point for new rooms. The selected file is copied to `BaseRoom/base-room.crm` inside your project directory, so the original room can safely be deleted or re-used in AGS after selection. During generation, any room that doesn't already have a `.crm` file will get a copy of this base room. This gives new rooms the same dimensions, hotspot layout, walkable areas, and other properties as the base.
+
+You can change the base room at any time from **Settings**. Set it to "(None)" to use automatic `.crm` generation.
 
 ### Maps
 
