@@ -511,6 +511,10 @@ fn copy_room_crm(
     template_room_id: u32,
     target_room_id: u32,
 ) -> Result<bool, String> {
+    // Guard against self-copy: copying a file onto itself truncates it to 0 bytes
+    if template_room_id == target_room_id {
+        return Ok(false);
+    }
     let dir = Path::new(&project_path);
     let target_path = dir.join(format!("room{}.crm", target_room_id));
     if target_path.exists() {
@@ -555,6 +559,10 @@ fn copy_all_room_files(
     target_room_id: u32,
     force: bool,
 ) -> Result<Vec<String>, String> {
+    // Guard against self-copy: copying a file onto itself truncates it to 0 bytes
+    if source_room_id == target_room_id {
+        return Ok(vec!["skipped:self-copy".to_string()]);
+    }
     let dir = Path::new(&project_path);
     let prefix = format!("room{}.", source_room_id);
     let entries = fs::read_dir(dir).map_err(|e| e.to_string())?;
@@ -1667,6 +1675,20 @@ mod tests {
 
         let result = copy_all_room_files(path, 1, 2, false).unwrap();
         assert!(result.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn copy_all_room_files_self_copy_skipped() {
+        let dir = temp_project_dir("copy_all_self");
+        let path = dir.to_string_lossy().to_string();
+        fs::write(dir.join("room5.crm"), b"original-data").unwrap();
+
+        // Self-copy (source == target) must not corrupt the file
+        let result = copy_all_room_files(path, 5, 5, true).unwrap();
+        assert_eq!(result, vec!["skipped:self-copy"]);
+        // File must remain intact
+        assert_eq!(fs::read_to_string(dir.join("room5.crm")).unwrap(), "original-data");
         let _ = fs::remove_dir_all(&dir);
     }
 

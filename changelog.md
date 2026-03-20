@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.3.1
+- fix: prevent template source rooms from corrupting their own .crm files during generation
+
 ## v1.3.0
 - feat: Images from map screens are automatically embedded into room.crm files
 - fix: harden backend validation, debounce saves, and eliminate innerHTML XSS vectors

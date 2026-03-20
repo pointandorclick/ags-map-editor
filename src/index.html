@@ -2290,6 +2290,9 @@ async function copyTemplateFiles() {
 
       const sourceRoomId = resolveTemplateSourceRoomId(state, room.templateId);
       if (sourceRoomId === null) continue;
+      // Skip template source rooms — they define the template, not consume it.
+      // Copying from sourceRoomId to itself would corrupt the .crm (fs::copy truncates).
+      if (sourceRoomId === room.roomId) continue;
 
       const copyResults = await invoke('copy_all_room_files', {
         projectPath,
@@ -2607,7 +2610,9 @@ async function createRoomCrmFiles() {
       const room = map.rooms[key];
       if (room.complete) continue;
       if (room.roomId === null) continue;
-      if (room.templateId) continue;
+      // Skip template CONSUMER rooms (their .crm comes from the template copy step).
+      // Template SOURCE rooms (isTemplate=true) need their .crm created normally.
+      if (room.templateId && !room.isTemplate) continue;
 
       if (baseRoom) {
         // ── Base room path: copy and let embed step handle the image ──
@@ -2689,8 +2694,9 @@ async function embedBackgroundImages(synthesizedRoomIds) {
       const room = map.rooms[key];
       if (room.complete) continue;
       if (!room.imageDataUrl || room.roomId === null) continue;
-      // Template rooms have their .crm copied as-is from the template — don't embed
-      if (room.templateId) continue;
+      // Template CONSUMER rooms have their .crm copied as-is from the template — don't embed.
+      // Template SOURCE rooms (isTemplate=true) need embedding like normal rooms.
+      if (room.templateId && !room.isTemplate) continue;
       // Synthesized rooms already have the image embedded during creation
       if (synthesizedRoomIds.has(room.roomId)) continue;
 
