@@ -1277,8 +1277,11 @@ fn build_crm(bg_width: u32, bg_height: u32, bpp: u32, pixels: &[u8]) -> Vec<u8> 
     // 7. Legacy poly-point areas: int32 = 0
     crm.extend_from_slice(&0i32.to_le_bytes());
 
-    // 8. Room edges: 4 × int16
-    crm.extend_from_slice(&[0u8; 8]);
+    // 8. Room edges: top, bottom, left, right (4 × int16)
+    crm.extend_from_slice(&0i16.to_le_bytes());                         // top
+    crm.extend_from_slice(&((bg_height as i16) - 1).to_le_bytes());     // bottom
+    crm.extend_from_slice(&0i16.to_le_bytes());                         // left
+    crm.extend_from_slice(&((bg_width as i16) - 1).to_le_bytes());      // right
 
     // 9. Object count (int16) = 0
     let obj_count: i16 = 0;
@@ -1308,8 +1311,22 @@ fn build_crm(bg_width: u32, bg_height: u32, bpp: u32, pixels: &[u8]) -> Vec<u8> 
     crm.extend_from_slice(&1i16.to_le_bytes());
 
     // 17. Walk area data: 16 areas × 5 arrays × int16
-    crm.extend_from_slice(&16i32.to_le_bytes());
-    crm.extend_from_slice(&[0u8; 5 * 16 * 2]);
+    //     Arrays: ScalingFar, PlayerView, ScalingNear, Top, Bottom
+    let walk_area_count: i32 = 16;
+    crm.extend_from_slice(&walk_area_count.to_le_bytes());
+    // ScalingFar: 16 × 0 (100% = no scaling)
+    crm.extend_from_slice(&[0u8; 16 * 2]);
+    // PlayerView: 16 × 0 (default)
+    crm.extend_from_slice(&[0u8; 16 * 2]);
+    // ScalingNear: 16 × -10000 (NOT_VECTOR_SCALED sentinel)
+    for _ in 0..16 {
+        crm.extend_from_slice(&(-10000i16).to_le_bytes());
+    }
+    // Top: 16 × 0
+    crm.extend_from_slice(&[0u8; 16 * 2]);
+    // Bottom: area 0 = height-1, rest = 0
+    crm.extend_from_slice(&((bg_height as i16) - 1).to_le_bytes());
+    crm.extend_from_slice(&[0u8; 15 * 2]);
 
     // 18. Password (11 bytes)
     crm.extend_from_slice(&[0u8; 11]);
