@@ -26,7 +26,8 @@ export function makeRoom(x, y) {
     isTemplate: false,
     templateId: null,
     lastAppliedTemplateId: null,
-    complete: false
+    complete: false,
+    blockedEdges: {}
   };
 }
 
@@ -88,6 +89,23 @@ export function parseLeaveFunction(content, dir) {
     isSimple,
     fullText: content.substring(funcStart, funcEnd)
   };
+}
+
+/**
+ * Remove a simple room_LeaveXxx function from script content.
+ * Returns { content, removed }. Only removes if the function is "simple"
+ * (contains only a player.ChangeRoomAutoPosition call).
+ */
+export function removeSimpleLeaveFunction(content, dir) {
+  const parsed = parseLeaveFunction(content, dir);
+  if (!parsed) return { content, removed: false };
+  if (!parsed.isSimple) return { content, removed: false };
+  // Trim preceding blank lines
+  let start = parsed.start;
+  while (start > 0 && content[start - 1] === '\n') start--;
+  if (start > 0) start++; // keep one newline separator
+  const newContent = content.substring(0, start) + content.substring(parsed.end);
+  return { content: newContent.replace(/\n{3,}/g, '\n\n').trimEnd() + '\n', removed: true };
 }
 
 export function sanitizeFilename(title) {

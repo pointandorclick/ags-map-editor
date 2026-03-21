@@ -16,7 +16,8 @@ import {
   resolveTemplateSourceRoomId,
   markRoomAsTemplate,
   isTemplateInUse,
-  unmarkRoomAsTemplate
+  unmarkRoomAsTemplate,
+  removeSimpleLeaveFunction
 } from './logic.js';
 
 // ─── coordKey ───────────────────────────────────────────
@@ -76,7 +77,8 @@ describe('makeRoom', () => {
       isTemplate: false,
       templateId: null,
       lastAppliedTemplateId: null,
-      complete: false
+      complete: false,
+      blockedEdges: {}
     });
   });
 });
@@ -666,5 +668,51 @@ describe('unmarkRoomAsTemplate', () => {
     unmarkRoomAsTemplate(state, 'm1', '0,0');
 
     expect(room.imageDataUrl).toBe('data:image/png;base64,abc');
+  });
+});
+
+// ─── removeSimpleLeaveFunction ─────────────────────────
+describe('removeSimpleLeaveFunction', () => {
+  it('removes a simple leave function', () => {
+    const content = '// desc\n\nfunction room_LeaveRight()\n{\n  player.ChangeRoomAutoPosition(5);\n}\n';
+    const result = removeSimpleLeaveFunction(content, 'Right');
+    expect(result.removed).toBe(true);
+    expect(result.content).not.toContain('room_LeaveRight');
+    expect(result.content).toContain('// desc');
+  });
+
+  it('leaves complex function untouched', () => {
+    const content = 'function room_LeaveRight()\n{\n  if (hasKey) player.ChangeRoomAutoPosition(5);\n}\n';
+    const result = removeSimpleLeaveFunction(content, 'Right');
+    expect(result.removed).toBe(false);
+    expect(result.content).toContain('room_LeaveRight');
+  });
+
+  it('returns unchanged when function does not exist', () => {
+    const content = '// just a comment\n';
+    const result = removeSimpleLeaveFunction(content, 'Top');
+    expect(result.removed).toBe(false);
+    expect(result.content).toBe(content);
+  });
+
+  it('only removes the targeted direction', () => {
+    const content = [
+      '// desc',
+      '',
+      'function room_LeaveLeft()',
+      '{',
+      '  player.ChangeRoomAutoPosition(3);',
+      '}',
+      '',
+      'function room_LeaveRight()',
+      '{',
+      '  player.ChangeRoomAutoPosition(5);',
+      '}',
+      ''
+    ].join('\n');
+    const result = removeSimpleLeaveFunction(content, 'Right');
+    expect(result.removed).toBe(true);
+    expect(result.content).toContain('room_LeaveLeft');
+    expect(result.content).not.toContain('room_LeaveRight');
   });
 });

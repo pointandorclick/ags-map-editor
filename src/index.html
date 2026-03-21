@@ -354,6 +354,37 @@ body {
 .plus-btn.left   { left: -36px; top: 50%; transform: translateY(-50%); }
 .plus-btn.right  { right: -36px; top: 50%; transform: translateY(-50%); }
 
+/* ── Edge block buttons ── */
+.edge-block-btn {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.15s;
+  color: var(--text-secondary);
+  border-radius: 50%;
+  background: none;
+  border: none;
+  line-height: 1;
+}
+.room-cell:hover .edge-block-btn { opacity: 0.7; }
+.edge-block-btn:hover { opacity: 1; }
+.edge-block-btn.blocked {
+  color: var(--accent);
+  opacity: 1 !important;
+}
+.edge-block-btn.top    { top: -34px;  left: 50%; transform: translateX(-50%); }
+.edge-block-btn.bottom { bottom: -34px; left: 50%; transform: translateX(-50%); }
+.edge-block-btn.left   { left: -34px; top: 50%; transform: translateY(-50%); }
+.edge-block-btn.right  { right: -34px; top: 50%; transform: translateY(-50%); }
+
 /* ── Context menu ── */
 #context-menu {
   position: fixed;
@@ -1149,7 +1180,8 @@ import {
   coordKey, parseCoord, coordDisplay, makeRoom, generateId,
   buildDescription, buildAscDescription, buildLeaveFunction, parseLeaveFunction,
   roomOverallType, ASC_DIRECTIONS, assignRoomIdsSync,
-  resolveTemplateSourceRoomId, markRoomAsTemplate, isTemplateInUse, unmarkRoomAsTemplate
+  resolveTemplateSourceRoomId, markRoomAsTemplate, isTemplateInUse, unmarkRoomAsTemplate,
+  removeSimpleLeaveFunction
 } from './logic.js';
 
 const { invoke } = window.__TAURI__.core;
@@ -1587,17 +1619,19 @@ function renderGrid() {
 
     // Edit mode: + buttons & drag-and-drop
     if (mode === 'edit') {
-      // + buttons for unoccupied neighbors
+      // + buttons for unoccupied neighbors, × buttons for occupied (blocked edge toggle)
       const neighbors = [
-        { dir: 'top', dx: 0, dy: 1 },
-        { dir: 'bottom', dx: 0, dy: -1 },
-        { dir: 'left', dx: -1, dy: 0 },
-        { dir: 'right', dx: 1, dy: 0 }
+        { dir: 'top', name: 'Top', dx: 0, dy: 1, opposite: 'Bottom' },
+        { dir: 'bottom', name: 'Bottom', dx: 0, dy: -1, opposite: 'Top' },
+        { dir: 'left', name: 'Left', dx: -1, dy: 0, opposite: 'Right' },
+        { dir: 'right', name: 'Right', dx: 1, dy: 0, opposite: 'Left' }
       ];
-      neighbors.forEach(({ dir, dx, dy }) => {
+      neighbors.forEach(({ dir, name, dx, dy, opposite }) => {
         const nx = room.x + dx;
         const ny = room.y + dy;
-        if (!occupied.has(coordKey(nx, ny))) {
+        const neighborKey = coordKey(nx, ny);
+        if (!occupied.has(neighborKey)) {
+          // Unoccupied neighbor: show + button
           const btn = document.createElement('div');
           btn.className = `plus-btn ${dir}`;
           btn.textContent = '+';
@@ -1607,6 +1641,36 @@ function renderGrid() {
             renderGrid();
           });
           cell.appendChild(btn);
+        } else if (
+          // Occupied neighbor: show × on one side only (owner = smaller coord on that axis)
+          (dir === 'right' && room.x < nx) ||
+          (dir === 'top' && room.y < ny)
+        ) {
+          const neighbor = map.rooms[neighborKey];
+          const isBlocked = (room.blockedEdges && room.blockedEdges[name]);
+          const xBtn = document.createElement('div');
+          xBtn.className = `edge-block-btn ${dir}` + (isBlocked ? ' blocked' : '');
+          xBtn.textContent = '\u00d7'; // ×
+          xBtn.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          });
+          xBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!room.blockedEdges) room.blockedEdges = {};
+            if (!neighbor.blockedEdges) neighbor.blockedEdges = {};
+            const nowBlocked = !room.blockedEdges[name];
+            if (nowBlocked) {
+              room.blockedEdges[name] = true;
+              neighbor.blockedEdges[opposite] = true;
+            } else {
+              delete room.blockedEdges[name];
+              delete neighbor.blockedEdges[opposite];
+            }
+            debouncedSave();
+            renderGrid();
+          });
+          cell.appendChild(xBtn);
         }
       });
 
@@ -2347,9 +2411,10 @@ async function generateRoomScripts() {
       const descFmt = (state.settings && state.settings.descriptionFormat) || '{MAP} - {TITLE} {COORDS}';
       const description = buildAscDescription(map.name, room.title || '', room.x, room.y, descFmt);
 
-      // Find adjacent rooms in the same map
+      // Find adjacent rooms in the same map (skip blocked edges)
       const adjacencies = {};
       for (const dir of ASC_DIRECTIONS) {
+        if (room.blockedEdges && room.blockedEdges[dir.name]) continue;
         const neighbor = map.rooms[coordKey(room.x + dir.dx, room.y + dir.dy)];
         if (neighbor && neighbor.roomId !== null) {
           adjacencies[dir.name] = neighbor.roomId;
@@ -2422,6 +2487,16 @@ async function generateRoomScripts() {
             roomChanges.actions.push({ type: 'skip', detail: `Skipped room_Leave${dir.name}() (complex logic)` });
           }
         }
+
+        // Remove simple leave functions for blocked edges
+        for (const dir of ASC_DIRECTIONS) {
+          if (!(room.blockedEdges && room.blockedEdges[dir.name])) continue;
+          const result = removeSimpleLeaveFunction(newContent, dir.name);
+          if (result.removed) {
+            newContent = result.content;
+            roomChanges.actions.push({ type: 'update', detail: `Removed room_Leave${dir.name}() (edge blocked)` });
+          }
+        }
       }
 
       // Write if content changed
@@ -2456,6 +2531,7 @@ async function updateCrmEvents() {
 
       const adjacencies = {};
       for (const dir of ASC_DIRECTIONS) {
+        if (room.blockedEdges && room.blockedEdges[dir.name]) continue;
         const neighbor = map.rooms[coordKey(room.x + dir.dx, room.y + dir.dy)];
         if (neighbor && neighbor.roomId !== null) {
           adjacencies[dir.name] = neighbor.roomId;
@@ -2610,9 +2686,17 @@ async function createRoomCrmFiles() {
       const room = map.rooms[key];
       if (room.complete) continue;
       if (room.roomId === null) continue;
-      // Skip template CONSUMER rooms (their .crm comes from the template copy step).
-      // Template SOURCE rooms (isTemplate=true) need their .crm created normally.
-      if (room.templateId && !room.isTemplate) continue;
+      // Skip template CONSUMER rooms only if their .crm already exists
+      // (created by the template copy step). If it's missing, fall through
+      // to synthesis so the room gets a valid .crm file.
+      if (room.templateId && !room.isTemplate) {
+        try {
+          const crmExists = await invoke('check_file_exists', {
+            filePath: projectPath + '/room' + room.roomId + '.crm'
+          });
+          if (crmExists) continue;
+        } catch (e) { /* fall through to create */ }
+      }
 
       if (baseRoom) {
         // ── Base room path: copy and let embed step handle the image ──

@@ -256,6 +256,7 @@ fn copy_base_room_file(
     }
 
     fs::copy(&source, &target).map_err(|e| e.to_string())?;
+    strip_provenance(&target);
     Ok("copied".to_string())
 }
 
