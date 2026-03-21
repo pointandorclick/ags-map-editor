@@ -2358,12 +2358,23 @@ async function copyTemplateFiles() {
       // Copying from sourceRoomId to itself would corrupt the .crm (fs::copy truncates).
       if (sourceRoomId === room.roomId) continue;
 
-      const copyResults = await invoke('copy_all_room_files', {
-        projectPath,
-        sourceRoomId,
-        targetRoomId: room.roomId,
-        force: true
-      });
+      let copyResults;
+      try {
+        copyResults = await invoke('copy_all_room_files', {
+          projectPath,
+          sourceRoomId,
+          targetRoomId: room.roomId,
+          force: true
+        });
+      } catch (e) {
+        results.push({
+          roomId: room.roomId,
+          mapName: map.name,
+          coord: coordDisplay(room.x, room.y),
+          actions: [{ type: 'error', detail: `Template copy failed: ${e}` }]
+        });
+        continue;
+      }
 
       const roomResult = {
         roomId: room.roomId,
@@ -2377,13 +2388,19 @@ async function copyTemplateFiles() {
           };
         })
       };
-      results.push(roomResult);
 
       // Only mark template as applied if a .crm was actually copied
       const crmCopied = copyResults.some(r => r.startsWith('copied:') && r.endsWith('.crm'));
       if (crmCopied) {
         room.lastAppliedTemplateId = room.templateId;
+      } else {
+        roomResult.actions.push({
+          type: 'error',
+          detail: `Template .crm not found on source Room ${sourceRoomId} — room will use a synthesized .crm instead`
+        });
       }
+
+      results.push(roomResult);
     }
   }
 
@@ -2892,20 +2909,21 @@ $btnGenerate.addEventListener('click', async () => {
     renderGrid();
   }
 
-  // Step 2: Copy template files for rooms with per-room templates
+  // Step 2: Create .crm files (base room copy or synthesis) — before template
+  //         copy so source template rooms have .crm files available to copy from.
+  const { changes: crmChanges, synthesizedRoomIds } = await createRoomCrmFiles();
+
+  // Step 3: Copy template files for rooms with per-room templates
   const templateChanges = await copyTemplateFiles();
   if (templateChanges.length > 0) {
     await saveState();
   }
 
-  // Step 3: Generate/update room scripts
+  // Step 4: Generate/update room scripts
   const scriptChanges = await generateRoomScripts();
 
-  // Step 4: Update Game.agf with room entries
+  // Step 5: Update Game.agf with room entries
   const agfChanges = await updateGameAgf();
-
-  // Step 5: Create .crm files (base room copy or synthesis)
-  const { changes: crmChanges, synthesizedRoomIds } = await createRoomCrmFiles();
 
   // Step 6: Register leave events in .crm files (after .crm files exist)
   const crmEventChanges = await updateCrmEvents();
@@ -3016,6 +3034,20 @@ $btnGenerate.addEventListener('click', async () => {
   }
   if (crmFailRooms.length > 0) {
     warningMessages.push(`These rooms could not have events registered in their .crm files. Build them in AGS Editor first, then re-generate: ${crmFailRooms.join(', ')}`);
+  }
+
+  // Check for template copy failures
+  const templateFailRooms = [];
+  for (const [, entry] of roomResults) {
+    for (const c of entry.changes) {
+      if (c.type === 'error' && (c.detail.includes('Template copy failed') || c.detail.includes('Template .crm not found'))) {
+        templateFailRooms.push(`Room ${entry.roomId} (${entry.title})`);
+        break;
+      }
+    }
+  }
+  if (templateFailRooms.length > 0) {
+    warningMessages.push(`These rooms could not have their template fully applied (source .crm missing or copy failed). They will use a synthesized .crm instead. Re-generate after building the source template room in AGS Editor: ${templateFailRooms.join(', ')}`);
   }
 
   if (warningMessages.length > 0) {
