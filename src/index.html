@@ -2514,6 +2514,18 @@ async function generateRoomScripts() {
             roomChanges.actions.push({ type: 'update', detail: `Removed room_Leave${dir.name}() (edge blocked)` });
           }
         }
+
+        // Remove simple leave functions for directions with no adjacent room
+        // (e.g. inherited from a template source that had different neighbors)
+        for (const dir of ASC_DIRECTIONS) {
+          if (adjacencies[dir.name] !== undefined) continue; // has neighbor, keep
+          if (room.blockedEdges && room.blockedEdges[dir.name]) continue; // already handled above
+          const result = removeSimpleLeaveFunction(newContent, dir.name);
+          if (result.removed) {
+            newContent = result.content;
+            roomChanges.actions.push({ type: 'update', detail: `Removed room_Leave${dir.name}() (no adjacent room)` });
+          }
+        }
       }
 
       // Write if content changed
@@ -2703,10 +2715,12 @@ async function createRoomCrmFiles() {
       const room = map.rooms[key];
       if (room.complete) continue;
       if (room.roomId === null) continue;
-      // Skip template CONSUMER rooms only if their .crm already exists
-      // (created by the template copy step). If it's missing, fall through
-      // to synthesis so the room gets a valid .crm file.
+      // Template CONSUMER rooms: skip if copyTemplateFiles will handle them
+      // (template not yet applied), or if .crm already exists from a prior generate.
+      // Only fall through to synthesis as a last resort if template was already
+      // applied but .crm is somehow missing.
       if (room.templateId && !room.isTemplate) {
+        if (room.templateId !== room.lastAppliedTemplateId) continue; // copyTemplateFiles will create it
         try {
           const crmExists = await invoke('check_file_exists', {
             filePath: projectPath + '/room' + room.roomId + '.crm'

@@ -2,7 +2,7 @@
 
 ## v1.3.1
 - fix: prevent template source rooms from corrupting their own .crm files during generation
-- feat: add blocked adge toggle to not create room_Leave for blocked edges 
+- feat: add blocked edge toggle to not create room_Leave for blocked edges 
 
 ## v1.3.0
 - feat: Images from map screens are automatically embedded into room.crm files
