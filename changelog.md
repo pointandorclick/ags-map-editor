@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.3.2
+- fix: sort the template dropdown in alphabetical order
+
 ## v1.3.1
 - fix: prevent template source rooms from corrupting their own .crm files during generation
 - feat: add blocked edge toggle to not create room_Leave for blocked edges 

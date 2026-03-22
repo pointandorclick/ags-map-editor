@@ -2064,7 +2064,7 @@ async function openEditPanel(x, y) {
   // Populate template dropdown
   $editTemplate.innerHTML = '<option value="">(None)</option>';
   const templates = getTemplates();
-  Object.entries(templates).forEach(([id, t]) => {
+  Object.entries(templates).sort(([, a], [, b]) => a.name.localeCompare(b.name)).forEach(([id, t]) => {
     const opt = document.createElement('option');
     opt.value = id;
     opt.textContent = t.name;
