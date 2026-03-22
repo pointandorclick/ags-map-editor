@@ -1266,17 +1266,22 @@ fn build_crm(bg_width: u32, bg_height: u32, bpp: u32, pixels: &[u8]) -> Vec<u8> 
     // 1. BackgroundBPP (int32)
     crm.extend_from_slice(&(bpp as i32).to_le_bytes());
 
-    // 2. WalkBehindCount (int16) = 1
-    crm.extend_from_slice(&1i16.to_le_bytes());
-    crm.extend_from_slice(&0i16.to_le_bytes()); // baseline
+    // 2. WalkBehindCount (int16) = 16 (AGS Editor default: MAX_WALK_BEHINDS)
+    let walk_behind_count: i16 = 16;
+    crm.extend_from_slice(&walk_behind_count.to_le_bytes());
+    for _ in 0..walk_behind_count {
+        crm.extend_from_slice(&0i16.to_le_bytes()); // baseline
+    }
 
-    // 3. HotspotCount (int32) = 1 (hotspot 0 = "no hotspot")
-    let hotspot_count: i32 = 1;
+    // 3. HotspotCount (int32) = 50 (AGS Editor default: MAX_ROOM_HOTSPOTS)
+    let hotspot_count: i32 = 50;
     crm.extend_from_slice(&hotspot_count.to_le_bytes());
 
-    // 4. Hotspot walk-to points
-    crm.extend_from_slice(&0i16.to_le_bytes());
-    crm.extend_from_slice(&0i16.to_le_bytes());
+    // 4. Hotspot walk-to points: (int16 x, int16 y) × count
+    for _ in 0..hotspot_count {
+        crm.extend_from_slice(&0i16.to_le_bytes());
+        crm.extend_from_slice(&0i16.to_le_bytes());
+    }
 
     // 5-6. Hotspot names + script names (length-prefixed empty strings)
     for _ in 0..(hotspot_count * 2) {
@@ -2263,6 +2268,19 @@ mod tests {
         assert!(changes.iter().any(|c| c.contains("Registered")));
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn build_crm_matches_ags_defaults() {
+        let crm = build_crm(320, 200, 4, &[]);
+        let (main_start, _) = find_main_block(&crm).unwrap();
+        // BackgroundBPP(4) then WalkBehindCount(2)
+        let walk_behind_count = read_i16(&crm, main_start + 4) as usize;
+        assert_eq!(walk_behind_count, 16, "synthesized CRM should have 16 walk-behinds (AGS default)");
+        // After WalkBehindCount + baselines: HotspotCount
+        let hotspot_offset = main_start + 4 + 2 + walk_behind_count * 2;
+        let hotspot_count = read_i32(&crm, hotspot_offset) as usize;
+        assert_eq!(hotspot_count, 50, "synthesized CRM should have 50 hotspots (AGS default)");
     }
 }
 
