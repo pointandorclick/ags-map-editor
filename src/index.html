@@ -457,6 +457,18 @@ body {
   resize: vertical;
 }
 
+#edit-reapply-warn {
+  display: block;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin: 4px 0 0;
+}
+
 #edit-panel .btn-row {
   display: flex;
   gap: 8px;
@@ -1084,6 +1096,12 @@ body {
   <select id="edit-template">
     <option value="">(None)</option>
   </select>
+  <div id="edit-reapply-row" style="display:none">
+    <label style="display:flex;align-items:center;gap:8px;margin:8px 0;cursor:pointer;user-select:none">
+      <input type="checkbox" id="edit-reapply"> <span id="edit-reapply-label">Re-apply on next update</span>
+    </label>
+    <span id="edit-reapply-warn" style="display:none"></span>
+  </div>
   <label>Notes</label>
   <textarea id="edit-notes" placeholder="Free text notes..."></textarea>
   <label style="display:flex;align-items:center;gap:8px;margin:8px 0;cursor:pointer;user-select:none">
@@ -1383,6 +1401,10 @@ const $editCoord = document.getElementById('edit-coord');
 const $editRoomId = document.getElementById('edit-room-id');
 const $editTitle = document.getElementById('edit-title');
 const $editTemplate = document.getElementById('edit-template');
+const $editReapplyRow = document.getElementById('edit-reapply-row');
+const $editReapply = document.getElementById('edit-reapply');
+const $editReapplyLabel = document.getElementById('edit-reapply-label');
+const $editReapplyWarn = document.getElementById('edit-reapply-warn');
 const $editNotes = document.getElementById('edit-notes');
 const $editComplete = document.getElementById('edit-complete');
 const $modalOverlay = document.getElementById('room-modal-overlay');
@@ -2072,6 +2094,23 @@ async function openEditPanel(x, y) {
     $editTemplate.appendChild(opt);
   });
 
+  // Configure re-apply template checkbox
+  $editReapply.checked = false;
+  $editReapplyWarn.style.display = 'none';
+  const isConsumerWithApplied = room.templateId && room.lastAppliedTemplateId && !room.isTemplate;
+  const isSourceInUse = room.isTemplate && room.templateId && isTemplateInUse(state, room.templateId);
+  if (isSourceInUse) {
+    $editReapplyRow.style.display = 'block';
+    $editReapplyLabel.textContent = 'Re-apply to all consumers on next update';
+    $editReapplyWarn.textContent = 'This will overwrite walkable areas, hotspots, regions, and walk-behinds on all rooms using this template on next update.';
+  } else if (isConsumerWithApplied) {
+    $editReapplyRow.style.display = 'block';
+    $editReapplyLabel.textContent = 'Re-apply on next update';
+    $editReapplyWarn.textContent = 'This will overwrite walkable areas, hotspots, regions, and walk-behinds on this room on next update.';
+  } else {
+    $editReapplyRow.style.display = 'none';
+  }
+
   $editPanel.style.display = 'block';
   $editBackdrop.style.display = 'block';
   $editTitle.focus();
@@ -2085,6 +2124,18 @@ function closeEditPanel() {
 
 $editBackdrop.addEventListener('click', closeEditPanel);
 document.getElementById('btn-edit-cancel').addEventListener('click', closeEditPanel);
+
+$editReapply.addEventListener('change', () => {
+  $editReapplyWarn.style.display = $editReapply.checked ? 'block' : 'none';
+});
+
+$editTemplate.addEventListener('change', () => {
+  // Hide re-apply row when the template selection changes — a new or cleared
+  // template already resets lastAppliedTemplateId via the save handler.
+  $editReapplyRow.style.display = 'none';
+  $editReapply.checked = false;
+  $editReapplyWarn.style.display = 'none';
+});
 
 document.getElementById('btn-edit-save').addEventListener('click', () => {
   if (!editingCoord) return;
@@ -2114,6 +2165,25 @@ document.getElementById('btn-edit-save').addEventListener('click', () => {
   // Room ID changed — reset so template files are copied for the new ID
   if (updates.roomId !== room.roomId) {
     updates.lastAppliedTemplateId = null;
+  }
+
+  // Re-apply template checkbox
+  if ($editReapply.checked && $editReapplyRow.style.display !== 'none') {
+    if (room.isTemplate && room.templateId) {
+      // Source room: reset lastAppliedTemplateId on ALL consumer rooms
+      for (const mapId of Object.keys(state.maps)) {
+        const rooms = state.maps[mapId].rooms;
+        for (const key of Object.keys(rooms)) {
+          const r = rooms[key];
+          if (r.templateId === room.templateId && r.lastAppliedTemplateId && !r.isTemplate) {
+            r.lastAppliedTemplateId = null;
+          }
+        }
+      }
+    } else {
+      // Consumer room: reset lastAppliedTemplateId on this room only
+      updates.lastAppliedTemplateId = null;
+    }
   }
 
   updateRoom(x, y, updates);
@@ -2580,7 +2650,9 @@ async function updateCrmEvents() {
           projectPath, roomId: room.roomId, updates: crmUpdates
         });
         for (const change of results) {
-          changes.push({ roomId: room.roomId, type: 'update', detail: change });
+          let type = 'new';
+          if (change.includes('already registered') || change.includes('skipped')) type = 'skip';
+          changes.push({ roomId: room.roomId, type, detail: change });
         }
       } catch (e) {
         const msg = String(e);
@@ -2827,7 +2899,8 @@ async function embedBackgroundImages(synthesizedRoomIds) {
         const result = await invoke('embed_image_in_crm', {
           projectPath, roomId: room.roomId, base64ImageData: base64Data
         });
-        changes.push({ roomId: room.roomId, type: 'new', detail: result, bold: true });
+        const isUnchanged = result.includes('already up to date');
+        changes.push({ roomId: room.roomId, type: isUnchanged ? 'skip' : 'new', detail: result, bold: !isUnchanged });
       } catch (e) {
         const msg = String(e);
         if (msg.includes('not found')) {

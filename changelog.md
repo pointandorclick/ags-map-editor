@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.3.3
+- feat: add re-apply template checkbox to room edit panel for both consumer and source rooms
+- fix: generate output now correctly reports SKIP for already-registered CRM events and unchanged backgrounds
+
 ## v1.3.2
 - fix: sort the template dropdown in alphabetical order
 - fix: synthesize CRM files with 50 hotspots and 16 regions to match AGS Editor defaults

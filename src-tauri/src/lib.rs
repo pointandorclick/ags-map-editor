@@ -1210,8 +1210,16 @@ fn embed_image_in_crm(
     // Encode the new background
     let new_bg = encode_background(&pixel_data, img_width, img_height, bg_info.bpp);
 
-    // Splice into the .crm file: replace old background with new
+    // Skip write if the background is already identical
     let bg_end = bg_info.offset + bg_info.total_size;
+    if new_bg.len() == bg_info.total_size && new_bg[..] == data[bg_info.offset..bg_end] {
+        return Ok(format!(
+            "room{}.crm background already up to date",
+            room_id
+        ));
+    }
+
+    // Splice into the .crm file: replace old background with new
     let mut new_data = Vec::with_capacity(data.len() - bg_info.total_size + new_bg.len());
     new_data.extend_from_slice(&data[..bg_info.offset]);
     new_data.extend_from_slice(&new_bg);
