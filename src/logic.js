@@ -174,6 +174,44 @@ export function isTemplateInUse(state, templateId) {
 }
 
 /**
+ * Return all rooms using a template, excluding the source room itself.
+ */
+export function getTemplateConsumerRooms(state, templateId) {
+  if (!templateId || !state.templates || !state.templates[templateId]) return [];
+  const tmpl = state.templates[templateId];
+  const consumers = [];
+
+  for (const mapId of Object.keys(state.maps)) {
+    const map = state.maps[mapId];
+    if (!map) continue;
+    const rooms = map.rooms || {};
+    for (const key of Object.keys(rooms)) {
+      const room = rooms[key];
+      if (room.templateId !== templateId) continue;
+      if (mapId === tmpl.sourceMapId && key === tmpl.sourceCoord) continue;
+      consumers.push({
+        mapId,
+        mapName: map.name || mapId,
+        coord: key,
+        x: room.x,
+        y: room.y,
+        roomId: room.roomId ?? null,
+        title: room.title || ''
+      });
+    }
+  }
+
+  consumers.sort((a, b) =>
+    a.mapName.localeCompare(b.mapName) ||
+    a.y - b.y ||
+    a.x - b.x ||
+    a.coord.localeCompare(b.coord)
+  );
+
+  return consumers;
+}
+
+/**
  * Unmark a room as a template and remove it from the templates collection.
  * Returns true on success, false if the room wasn't a template.
  */

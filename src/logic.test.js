@@ -16,6 +16,7 @@ import {
   resolveTemplateSourceRoomId,
   markRoomAsTemplate,
   isTemplateInUse,
+  getTemplateConsumerRooms,
   unmarkRoomAsTemplate,
   removeSimpleLeaveFunction
 } from './logic.js';
@@ -609,6 +610,72 @@ describe('isTemplateInUse', () => {
   it('returns false when templates object is missing', () => {
     const state = { maps: { m1: { name: 'Map1', rooms: {} } }, activeMapId: 'm1' };
     expect(isTemplateInUse(state, 't1')).toBe(false);
+  });
+});
+
+// ─── getTemplateConsumerRooms ──────────────────────────
+describe('getTemplateConsumerRooms', () => {
+  function makeState(maps, templates) {
+    return { maps, activeMapId: Object.keys(maps)[0] || null, templates: templates || {}, settings: {} };
+  }
+
+  it('returns template consumer rooms and excludes the source room', () => {
+    const src = makeRoom(0, 0);
+    src.isTemplate = true;
+    src.templateId = 't1';
+    const consumer = makeRoom(1, 2);
+    consumer.templateId = 't1';
+    consumer.roomId = 12;
+    consumer.title = 'Hallway';
+    const state = makeState(
+      { m1: { name: 'Map1', rooms: { '0,0': src, '1,2': consumer } } },
+      { t1: { name: 'Tmpl', imageDataUrl: 'x', sourceCoord: '0,0', sourceMapId: 'm1' } }
+    );
+
+    expect(getTemplateConsumerRooms(state, 't1')).toEqual([
+      {
+        mapId: 'm1',
+        mapName: 'Map1',
+        coord: '1,2',
+        x: 1,
+        y: 2,
+        roomId: 12,
+        title: 'Hallway'
+      }
+    ]);
+  });
+
+  it('returns an empty array for missing templates', () => {
+    const state = makeState({ m1: { name: 'Map1', rooms: {} } });
+    expect(getTemplateConsumerRooms(state, 'missing')).toEqual([]);
+  });
+
+  it('sorts consumers by map name and coordinates', () => {
+    const src = makeRoom(0, 0);
+    src.isTemplate = true;
+    src.templateId = 't1';
+
+    const a = makeRoom(3, 1);
+    a.templateId = 't1';
+    a.title = 'A';
+
+    const b = makeRoom(1, 5);
+    b.templateId = 't1';
+    b.title = 'B';
+
+    const c = makeRoom(0, 2);
+    c.templateId = 't1';
+    c.title = 'C';
+
+    const state = makeState(
+      {
+        zmap: { name: 'Zoo', rooms: { '3,1': a } },
+        amap: { name: 'Alpha', rooms: { '0,0': src, '1,5': b, '0,2': c } }
+      },
+      { t1: { name: 'Tmpl', imageDataUrl: 'x', sourceCoord: '0,0', sourceMapId: 'amap' } }
+    );
+
+    expect(getTemplateConsumerRooms(state, 't1').map((room) => room.coord)).toEqual(['0,2', '1,5', '3,1']);
   });
 });
 

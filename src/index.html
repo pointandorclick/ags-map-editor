@@ -566,6 +566,30 @@ body {
   overflow-y: auto;
 }
 
+#room-modal .template-usage {
+  margin-top: 12px;
+  padding: 10px;
+  background: var(--bg-input);
+  border-radius: 4px;
+}
+
+#room-modal .template-usage h3 {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+#room-modal .template-usage ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+#room-modal .template-usage li + li {
+  margin-top: 4px;
+}
+
 #room-modal .close-btn {
   display: block;
   margin: 16px auto 0;
@@ -1125,6 +1149,10 @@ body {
       <span id="modal-filename"></span>
     </div>
     <div class="notes" id="modal-notes"></div>
+    <div class="template-usage" id="modal-template-usage" style="display:none;">
+      <h3>Rooms using this template</h3>
+      <ul id="modal-template-usage-list"></ul>
+    </div>
     <button class="close-btn" id="btn-modal-close">Close</button>
   </div>
 </div>
@@ -1198,7 +1226,7 @@ import {
   coordKey, parseCoord, coordDisplay, makeRoom, generateId,
   buildDescription, buildAscDescription, buildLeaveFunction, parseLeaveFunction,
   roomOverallType, ASC_DIRECTIONS, assignRoomIdsSync,
-  resolveTemplateSourceRoomId, markRoomAsTemplate, isTemplateInUse, unmarkRoomAsTemplate,
+  resolveTemplateSourceRoomId, markRoomAsTemplate, isTemplateInUse, getTemplateConsumerRooms, unmarkRoomAsTemplate,
   removeSimpleLeaveFunction
 } from './logic.js';
 
@@ -2208,6 +2236,8 @@ function openRoomModal(room) {
   document.getElementById('modal-img').src = room.imageDataUrl;
   document.getElementById('modal-title').textContent = room.title || '(Untitled)';
   const $modalRoomId = document.getElementById('modal-room-id');
+  const $templateUsage = document.getElementById('modal-template-usage');
+  const $templateUsageList = document.getElementById('modal-template-usage-list');
   if (room.roomId != null) {
     $modalRoomId.textContent = 'Room: ' + room.roomId;
     $modalRoomId.style.display = '';
@@ -2223,6 +2253,26 @@ function openRoomModal(room) {
   } else {
     notesEl.style.display = 'none';
   }
+
+  const consumers = room.isTemplate && room.templateId
+    ? getTemplateConsumerRooms(state, room.templateId)
+    : [];
+  if (consumers.length > 0) {
+    $templateUsageList.innerHTML = '';
+    consumers.forEach((consumer) => {
+      const item = document.createElement('li');
+      const parts = [consumer.mapName, coordDisplay(consumer.x, consumer.y)];
+      if (consumer.roomId != null) parts.push('Room ' + consumer.roomId);
+      if (consumer.title) parts.push(consumer.title);
+      item.textContent = parts.join(' \u2022 ');
+      $templateUsageList.appendChild(item);
+    });
+    $templateUsage.style.display = 'block';
+  } else {
+    $templateUsage.style.display = 'none';
+    $templateUsageList.innerHTML = '';
+  }
+
   $modalOverlay.classList.add('visible');
 }
 
