@@ -1472,10 +1472,10 @@ $mapSelect.addEventListener('change', () => {
 
 document.getElementById('btn-new-map').addEventListener('click', promptNewMap);
 document.getElementById('btn-empty-new-map').addEventListener('click', promptNewMap);
-document.getElementById('btn-edit-map').addEventListener('click', () => {
+document.getElementById('btn-edit-map').addEventListener('click', async () => {
   if (!state.activeMapId) return;
   const map = getActiveMap();
-  const name = prompt('Rename map:', map.name);
+  const name = await showPromptDialog('Rename map:', map.name);
   if (!name || !name.trim()) return;
   map.name = name.trim();
   debouncedSave();
@@ -1491,8 +1491,8 @@ document.getElementById('btn-delete-map').addEventListener('click', () => {
   }
 });
 
-function promptNewMap() {
-  const name = prompt('Enter map name:');
+async function promptNewMap() {
+  const name = await showPromptDialog('Enter map name:', '');
   if (!name || !name.trim()) return;
   createMap(name.trim());
   refreshMapSelect();
