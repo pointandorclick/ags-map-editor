@@ -14,3 +14,4 @@ src-tauri/gen/schemas/
 .DS_Store
 
 .context
+app-notary-ci
