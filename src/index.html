@@ -3579,7 +3579,7 @@ document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => e.preventDefault());
 
 // ── Auto-update check ──
-setTimeout(async () => {
+async function checkForUpdates(silent = false) {
   try {
     const update = await window.__TAURI__.updater.check();
     if (update) {
@@ -3588,11 +3588,22 @@ setTimeout(async () => {
         await update.downloadAndInstall();
         await window.__TAURI__.process.relaunch();
       }
+    } else if (!silent) {
+      alert('You are running the latest version.');
     }
   } catch (e) {
-    console.log('Update check skipped:', e);
+    console.log('Update check failed:', e);
+    if (!silent) {
+      alert('Could not check for updates. Please try again later.');
+    }
   }
-}, 2000);
+}
+
+// Check silently on launch
+setTimeout(() => checkForUpdates(true), 2000);
+
+// Listen for menu "Check for Updates..." click
+window.__TAURI__.event.listen('check-for-updates', () => checkForUpdates(false));
 </script>
 </body>
 </html>

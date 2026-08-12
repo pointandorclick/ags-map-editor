@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri_plugin_dialog::DialogExt;
 
 /// Strip the `com.apple.provenance` extended attribute that macOS sets on files
@@ -2298,6 +2299,54 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            let check_updates = MenuItemBuilder::with_id("check_for_updates", "Check for Updates...")
+                .build(app)?;
+
+            let app_menu = SubmenuBuilder::new(app, "AGS Map Editor")
+                .about(None)
+                .separator()
+                .item(&check_updates)
+                .separator()
+                .services()
+                .separator()
+                .hide()
+                .hide_others()
+                .show_all()
+                .separator()
+                .quit()
+                .build()?;
+
+            let edit_menu = SubmenuBuilder::new(app, "Edit")
+                .undo()
+                .redo()
+                .separator()
+                .cut()
+                .copy()
+                .paste()
+                .select_all()
+                .build()?;
+
+            let window_menu = SubmenuBuilder::new(app, "Window")
+                .minimize()
+                .close_window()
+                .build()?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&app_menu)
+                .item(&edit_menu)
+                .item(&window_menu)
+                .build()?;
+
+            app.set_menu(menu)?;
+
+            Ok(())
+        })
+        .on_menu_event(|app, event| {
+            if event.id() == "check_for_updates" {
+                let _ = app.emit("check-for-updates", ());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             pick_project_folder,
             validate_project,
