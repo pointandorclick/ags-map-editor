@@ -504,6 +504,57 @@ body {
 
 #edit-panel .btn-row button.danger:hover { background: var(--red-hover); }
 
+/* ── Edit panel image drop zone ── */
+#edit-image-drop {
+  position: relative;
+  width: 100%;
+  height: 120px;
+  border: 2px dashed var(--border-light);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  background: var(--bg-input);
+  transition: border-color 0.15s;
+}
+#edit-image-drop:hover,
+#edit-image-drop:focus-visible,
+#edit-image-drop.drag-over {
+  border-color: var(--accent-soft);
+}
+#edit-image-preview {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+#edit-image-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+#edit-image-clear {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+#edit-image-clear:hover { background: var(--red-hover); }
+
 /* ── Display Modal ── */
 #room-modal-overlay {
   position: fixed;
@@ -1126,6 +1177,12 @@ body {
     </label>
     <span id="edit-reapply-warn" style="display:none"></span>
   </div>
+  <label>Image</label>
+  <div id="edit-image-drop" tabindex="0">
+    <img id="edit-image-preview" src="" alt="" style="display:none">
+    <span id="edit-image-hint">Paste, drop, or click to set image</span>
+    <button type="button" id="edit-image-clear" style="display:none" title="Remove image">&times;</button>
+  </div>
   <label>Notes</label>
   <textarea id="edit-notes" placeholder="Free text notes..."></textarea>
   <label style="display:flex;align-items:center;gap:8px;margin:8px 0;cursor:pointer;user-select:none">
@@ -1435,6 +1492,10 @@ const $editReapplyLabel = document.getElementById('edit-reapply-label');
 const $editReapplyWarn = document.getElementById('edit-reapply-warn');
 const $editNotes = document.getElementById('edit-notes');
 const $editComplete = document.getElementById('edit-complete');
+const $editImageDrop = document.getElementById('edit-image-drop');
+const $editImagePreview = document.getElementById('edit-image-preview');
+const $editImageHint = document.getElementById('edit-image-hint');
+const $editImageClear = document.getElementById('edit-image-clear');
 const $modalOverlay = document.getElementById('room-modal-overlay');
 const $zoomControls = document.getElementById('zoom-controls');
 const $zoomDisplay = document.getElementById('zoom-display');
@@ -2139,6 +2200,20 @@ async function openEditPanel(x, y) {
     $editReapplyRow.style.display = 'none';
   }
 
+  // Show current room image (if any)
+  editPendingImage = null;
+  if (room.imageDataUrl) {
+    $editImagePreview.src = room.imageDataUrl;
+    $editImagePreview.style.display = 'block';
+    $editImageHint.style.display = 'none';
+    $editImageClear.style.display = 'flex';
+  } else {
+    $editImagePreview.src = '';
+    $editImagePreview.style.display = 'none';
+    $editImageHint.style.display = '';
+    $editImageClear.style.display = 'none';
+  }
+
   $editPanel.style.display = 'block';
   $editBackdrop.style.display = 'block';
   $editTitle.focus();
@@ -2152,6 +2227,83 @@ function closeEditPanel() {
 
 $editBackdrop.addEventListener('click', closeEditPanel);
 document.getElementById('btn-edit-cancel').addEventListener('click', closeEditPanel);
+
+// ── Edit panel image drop/paste ──
+let editPendingImage = null; // { dataUrl, filename } or null
+
+function showEditImage(dataUrl, filename) {
+  editPendingImage = { dataUrl, filename: filename || '(pasted)' };
+  $editImagePreview.src = dataUrl;
+  $editImagePreview.style.display = 'block';
+  $editImageHint.style.display = 'none';
+  $editImageClear.style.display = 'flex';
+}
+
+function clearEditImage() {
+  editPendingImage = { dataUrl: null, filename: null };
+  $editImagePreview.src = '';
+  $editImagePreview.style.display = 'none';
+  $editImageHint.style.display = '';
+  $editImageClear.style.display = 'none';
+}
+
+function loadEditImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+  if (file.size > MAX_IMAGE_SIZE) {
+    alert('Image is too large (max 10 MB).');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => showEditImage(reader.result, file.name);
+  reader.readAsDataURL(file);
+}
+
+// Paste from clipboard
+$editPanel.addEventListener('paste', (e) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      loadEditImageFile(item.getAsFile());
+      return;
+    }
+  }
+});
+
+// Click to browse
+$editImageDrop.addEventListener('click', (e) => {
+  if (e.target === $editImageClear) return;
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = () => {
+    if (input.files[0]) loadEditImageFile(input.files[0]);
+  };
+  input.click();
+});
+
+// Drag and drop onto the image zone
+$editImageDrop.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  $editImageDrop.classList.add('drag-over');
+});
+$editImageDrop.addEventListener('dragleave', () => {
+  $editImageDrop.classList.remove('drag-over');
+});
+$editImageDrop.addEventListener('drop', (e) => {
+  e.preventDefault();
+  $editImageDrop.classList.remove('drag-over');
+  loadEditImageFile(e.dataTransfer.files[0]);
+});
+
+// Clear button
+$editImageClear.addEventListener('click', (e) => {
+  e.stopPropagation();
+  clearEditImage();
+});
 
 $editReapply.addEventListener('change', () => {
   $editReapplyWarn.style.display = $editReapply.checked ? 'block' : 'none';
@@ -2178,10 +2330,17 @@ document.getElementById('btn-edit-save').addEventListener('click', () => {
     complete: $editComplete.checked
   };
 
+  // Apply pending image change (paste/drop/browse/clear in the edit panel)
+  if (editPendingImage) {
+    updates.imageDataUrl = editPendingImage.dataUrl;
+    updates.imageFilename = editPendingImage.filename;
+  }
+
   // If template selected and room has no image, copy template image
+  const effectiveHasImage = editPendingImage ? !!editPendingImage.dataUrl : !!room.imageDataUrl;
   if (updates.templateId) {
     const template = state.templates[updates.templateId];
-    if (template && !room.imageDataUrl) {
+    if (template && !effectiveHasImage) {
       updates.imageDataUrl = template.imageDataUrl;
       updates.imageFilename = '(from template: ' + template.name + ')';
     }
